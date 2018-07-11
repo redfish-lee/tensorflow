@@ -18,6 +18,11 @@ limitations under the License.
 
 #include <memory>
 
+// 20180627
+#include <thread>
+#include <string>
+//
+
 #include "grpc++/grpc++.h"
 #include "grpc++/security/credentials.h"
 
@@ -107,6 +112,11 @@ class GrpcServer : public ServerInterface {
 
   const ServerDef& server_def() const { return server_def_; }
 
+
+  // 20180710
+  // monitor thread execution
+  static Status monitor_func(const string& path, const string& filename);
+
  private:
   // The overall server configuration.
   const ServerDef server_def_;
@@ -143,6 +153,12 @@ class GrpcServer : public ServerInterface {
   std::unique_ptr<Thread> worker_thread_ GUARDED_BY(mu_);
 
   std::unique_ptr<::grpc::Server> server_ GUARDED_BY(mu_);
+  
+  // Create monitor thread for cluster file changes
+  std::unique_ptr<std::thread> monitor_thread_;
+  const string file_dir  = "/home/hylee/elastic-dev/userprog/config";
+  const string file_name = "cluster.cfg";
+
 };
 
 }  // namespace tensorflow

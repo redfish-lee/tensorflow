@@ -19,6 +19,12 @@ limitations under the License.
 #include <limits>
 #include <memory>
 
+
+// 20180627 inotify headers
+#include <thread>
+#include <sys/inotify.h>
+// end include
+
 #include "grpc++/grpc++.h"
 #include "grpc++/security/credentials.h"
 #include "grpc++/server_builder.h"
@@ -70,9 +76,29 @@ RendezvousMgrInterface* NewRpcRendezvousMgr(const WorkerEnv* env) {
 }  // namespace
 
 GrpcServer::GrpcServer(const ServerDef& server_def, Env* env)
-    : server_def_(server_def), env_(env), state_(NEW) {}
+    : server_def_(server_def), env_(env), state_(NEW) {
+
+  // TODO(leo):
+  // file_dir and file_path should be initialized here later
+
+  // 20180710 
+  // monitor thread impl.
+  
+  LOG(INFO) << "[GrpcServer/ctor] create thread and pass params";
+  
+  monitor_thread_.reset(
+          new std::thread(monitor_func,
+              std::ref(file_dir), std::ref(file_name)));
+
+  monitor_thread_->detach();
+}
 
 GrpcServer::~GrpcServer() {
+
+  // 20180627
+  // monitor thread join
+  // monitor_thread_.join();
+
   TF_CHECK_OK(Stop());
   TF_CHECK_OK(Join());
 
@@ -108,6 +134,9 @@ Status GrpcServer::Init(
     const RendezvousMgrCreationFunction& rendezvous_mgr_func,
     const WorkerCreationFunction& worker_func,
     const StatsPublisherFactory& stats_factory) {
+
+  LOG(INFO) << "[my] GrpcServer Init";
+
   mutex_lock l(mu_);
   CHECK_EQ(state_, NEW);
   master_env_.env = env_;
@@ -329,7 +358,7 @@ Status GrpcServer::Start() {
           env_->StartThread(ThreadOptions(), "TF_worker_service",
                             [this] { worker_service_->HandleRPCsLoop(); }));
       state_ = STARTED;
-      LOG(INFO) << "Started server with target: " << target();
+      LOG(INFO) << "[my] Started server with target: " << target();
       return Status::OK();
     }
     case STARTED:
@@ -398,11 +427,28 @@ std::unique_ptr<Master> GrpcServer::CreateMaster(MasterEnv* master_env) {
 /* static */
 Status GrpcServer::Create(const ServerDef& server_def, Env* env,
                           std::unique_ptr<ServerInterface>* out_server) {
+
+  LOG(INFO) << "[my] GrpcServer Create";
   std::unique_ptr<GrpcServer> ret(
       new GrpcServer(server_def, env == nullptr ? Env::Default() : env));
   ServiceInitFunction service_func = nullptr;
   TF_RETURN_IF_ERROR(ret->Init(service_func, NewRpcRendezvousMgr));
   *out_server = std::move(ret);
+  return Status::OK();
+}
+
+// 20180710
+// monitor thread function
+/* static */
+Status GrpcServer::monitor_func(const string& path, const string& filename) {
+
+  LOG(INFO) << "[monitor thread] path: " << path;
+  LOG(INFO) << "[monitor thread] file: " << filename;
+
+  while (true) {
+    LOG(INFO) << "[monitor thread] polling changes in while loop";
+  }
+
   return Status::OK();
 }
 
