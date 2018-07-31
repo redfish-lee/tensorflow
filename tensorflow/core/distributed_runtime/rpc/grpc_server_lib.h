@@ -159,6 +159,8 @@ class GrpcServer : public ServerInterface {
   const string file_dir  = "/home/hylee/elastic-dev/userprog/config";
   const string file_name = "cluster.cfg";
 
+  // Signal monitor while loop
+  bool should_stop = false;
 };
 
 }  // namespace tensorflow

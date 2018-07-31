@@ -19,11 +19,12 @@ limitations under the License.
 #include <limits>
 #include <memory>
 
-
-// 20180627 inotify headers
+// inotify headers
 #include <thread>
 #include <sys/inotify.h>
-// end include
+
+#include <iostream>
+#include <fstream>
 
 #include "grpc++/grpc++.h"
 #include "grpc++/security/credentials.h"
@@ -81,9 +82,6 @@ GrpcServer::GrpcServer(const ServerDef& server_def, Env* env)
   // TODO(leo):
   // file_dir and file_path should be initialized here later
 
-  // 20180710 
-  // monitor thread impl.
-  
   LOG(INFO) << "[GrpcServer/ctor] create thread and pass params";
   
   monitor_thread_.reset(
@@ -95,9 +93,8 @@ GrpcServer::GrpcServer(const ServerDef& server_def, Env* env)
 
 GrpcServer::~GrpcServer() {
 
-  // 20180627
-  // monitor thread join
-  // monitor_thread_.join();
+  // Signal to quit thread loop, then 
+  monitor_thread_.reset();
 
   TF_CHECK_OK(Stop());
   TF_CHECK_OK(Join());
@@ -437,18 +434,66 @@ Status GrpcServer::Create(const ServerDef& server_def, Env* env,
   return Status::OK();
 }
 
-// 20180710
 // monitor thread function
 /* static */
 Status GrpcServer::monitor_func(const string& path, const string& filename) {
 
-  LOG(INFO) << "[monitor thread] path: " << path;
-  LOG(INFO) << "[monitor thread] file: " << filename;
+  LOG(INFO) << "=== monitor thread ===";
+  LOG(INFO) << "path: " << path;
+  LOG(INFO) << "file: " << filename;
 
-  while (true) {
-    LOG(INFO) << "[monitor thread] polling changes in while loop";
+  #define EVENT_SIZE  sizeof(struct inotify_event)
+  #define BUF_LEN     (1024 * (EVENT_SIZE + 16))
+  
+  int fd = inotify_init();
+  if (fd < 0) 
+    LOG(ERROR) << "Couldn't initialize inotify";
+  
+  // Add starting directory target
+  int wd = inotify_add_watch(fd, path.c_str(), IN_MODIFY);
+  if (wd == -1)
+    LOG(ERROR) << "Couldn't add watch to " << path;
+  else
+    LOG(INFO) << "inotify now watching: " << path;
+
+  // int i = 0;
+
+  // signal this loop in GrpcServer dtor
+  while(1) {
+    int i = 0;
+    char buffer[BUF_LEN];
+    int length = read(fd, buffer, BUF_LEN);
+    if (length < 0) 
+      LOG(INFO) << "read..";
+
+    while (i < length) {
+      LOG(INFO) << "Waiting event.. ";
+      struct inotify_event *event = (struct inotify_event *) &buffer[i];
+      
+      if (event->len) {
+        if (event->mask & IN_MODIFY) {
+          LOG(INFO) << "[FILE] " << event->name << " was modified.";
+          
+          // target file changes
+          if (filename.compare(event->name) == 0) {
+            LOG(INFO) << "Do cluster update stuff.. ";
+            
+            std::ifstream f(filename);
+            if (f.is_open()) LOG(INFO) << f.rdbuf();
+
+          }
+        }
+      }
+      
+      // update index to start of next event
+      i += EVENT_SIZE + event->len;
+    } 
   }
-
+  
+  // Clean up
+  inotify_rm_watch(fd, wd);
+  close(fd);
+  
   return Status::OK();
 }
 
@@ -483,3 +528,4 @@ static GrpcServerRegistrar registrar;
 
 }  // namespace
 }  // namespace tensorflow
+
