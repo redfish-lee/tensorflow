@@ -23,8 +23,15 @@ limitations under the License.
 #include <thread>
 #include <sys/inotify.h>
 
-#include <iostream>
+// get new cluster info
+
+#include <string>
 #include <fstream>
+#include <iostream>
+#include <google/protobuf/util/json_util.h>
+#include "tensorflow/core/protobuf/cluster.pb.h"
+#include "tensorflow/core/lib/strings/str_util.h"
+#include "tensorflow/core/lib/strings/strcat.h"
 
 #include "grpc++/grpc++.h"
 #include "grpc++/security/credentials.h"
@@ -80,13 +87,13 @@ GrpcServer::GrpcServer(const ServerDef& server_def, Env* env)
     : server_def_(server_def), env_(env), state_(NEW) {
 
   // TODO(leo):
-  // file_dir and file_path should be initialized here later
+  // target_dir and target_file should be initialized here later
 
   LOG(INFO) << "[GrpcServer/ctor] create thread and pass params";
   
   monitor_thread_.reset(
           new std::thread(monitor_func,
-              std::ref(file_dir), std::ref(file_name)));
+              std::ref(target_dir), std::ref(target_file)));
 
   monitor_thread_->detach();
 }
@@ -132,7 +139,7 @@ Status GrpcServer::Init(
     const WorkerCreationFunction& worker_func,
     const StatsPublisherFactory& stats_factory) {
 
-  LOG(INFO) << "[my] GrpcServer Init";
+  LOG(INFO) << "[GrpcServer/Init]";
 
   mutex_lock l(mu_);
   CHECK_EQ(state_, NEW);
@@ -436,10 +443,11 @@ Status GrpcServer::Create(const ServerDef& server_def, Env* env,
 
 // monitor thread function
 /* static */
-Status GrpcServer::monitor_func(const string& path, const string& filename) {
+Status GrpcServer::monitor_func(const string& filepath, 
+                                const string& filename) {
 
   LOG(INFO) << "=== monitor thread ===";
-  LOG(INFO) << "path: " << path;
+  LOG(INFO) << "path: " << filepath;
   LOG(INFO) << "file: " << filename;
 
   #define EVENT_SIZE  sizeof(struct inotify_event)
@@ -450,11 +458,11 @@ Status GrpcServer::monitor_func(const string& path, const string& filename) {
     LOG(ERROR) << "Couldn't initialize inotify";
   
   // Add starting directory target
-  int wd = inotify_add_watch(fd, path.c_str(), IN_MODIFY);
+  int wd = inotify_add_watch(fd, filepath.c_str(), IN_MODIFY);
   if (wd == -1)
-    LOG(ERROR) << "Couldn't add watch to " << path;
+    LOG(ERROR) << "Couldn't add watch to " << filepath;
   else
-    LOG(INFO) << "inotify now watching: " << path;
+    LOG(INFO) << "inotify now watching: " << filepath;
 
   // int i = 0;
 
@@ -477,9 +485,9 @@ Status GrpcServer::monitor_func(const string& path, const string& filename) {
           // target file changes
           if (filename.compare(event->name) == 0) {
             LOG(INFO) << "Do cluster update stuff.. ";
+            Status ret = ClusterUpdate(filepath, filename);
             
-            std::ifstream f(filename);
-            if (f.is_open()) LOG(INFO) << f.rdbuf();
+            LOG(INFO) << "[monitor_func] cluster update status: " << ret;
 
           }
         }
@@ -494,6 +502,22 @@ Status GrpcServer::monitor_func(const string& path, const string& filename) {
   inotify_rm_watch(fd, wd);
   close(fd);
   
+  return Status::OK();
+}
+
+// Get new cluster content
+/* static */
+Status GrpcServer::ClusterUpdate(const string& filepath, 
+                                 const string& filename) {
+
+  string full_path = strings::StrCat(filepath, filename);
+  std::ifstream ifs(full_path);
+  std::string cluster;
+  cluster.assign((std::istreambuf_iterator<char>(ifs)), 
+                 (std::istreambuf_iterator<char>()));
+
+ 
+  LOG(INFO) << "[ClusterUpdate] new content: " << cluster; 
   return Status::OK();
 }
 
