@@ -941,6 +941,7 @@ cc_library(
 cc_library(
     name = "all_kernels",
     visibility = ["//visibility:public"],
+    copts = tf_copts(),
     deps = [
         "//tensorflow/core/kernels:array",
         "//tensorflow/core/kernels:audio",

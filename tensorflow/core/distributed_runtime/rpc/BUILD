@@ -280,6 +280,7 @@ cc_library(
         ":grpc_worker_cache",
         ":grpc_worker_service",
         ":rpc_rendezvous_mgr",
+        "//third_party/include:json",
         "//tensorflow/core:core_cpu",
         "//tensorflow/core:core_cpu_internal",
         "//tensorflow/core:framework",
