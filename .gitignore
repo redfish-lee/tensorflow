@@ -34,3 +34,8 @@ xcuserdata/**
 *.iml
 local.properties
 gradleBuild
+
+# debug
+tags
+cscope.files
+cscope.out
