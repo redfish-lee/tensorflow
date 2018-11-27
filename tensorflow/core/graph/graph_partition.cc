@@ -970,6 +970,9 @@ Status Partition(const PartitionOptions& opts, Graph* g,
   int32 num_control = 0;
   for (const Node* dst : g->op_nodes()) {
     dstp = opts.node_to_loc(dst);
+
+    // (*partitions): unordered_map
+    // (*partitions)[dstp]: unordered_map["key"], which is a GraphDef
     GraphDef* dst_graph = &(*partitions)[dstp];
     NodeDef* dst_def = dst_graph->add_node();
     *dst_def = dst->def();
@@ -1081,6 +1084,8 @@ Status Partition(const PartitionOptions& opts, Graph* g,
 
       NodeDefBuilder::NodeOut send_from;
       if (edge->IsControlEdge()) {
+        // Case 3
+        // src --(Control Edge)-> Dummy -> send
         // Insert a dummy const node that will generate a tiny
         // data element to be sent from send to recv.
         VLOG(1) << "Send/Recv control: " << src->assigned_device_name() << "["
@@ -1095,18 +1100,28 @@ Status Partition(const PartitionOptions& opts, Graph* g,
         AddInput(dummy, src->name(), Graph::kControlSlot);
         send_from.Reset(dummy->name(), 0, DT_FLOAT);
       } else {
+
+
+        // Case 2, add send node directly
+        // src -> send
         send_from.Reset(src->name(), edge->src_output(), EdgeType(edge));
       }
 
+      //////////////
+      // ADD SEND //
+      //////////////
       // Need to split edge by placing matching send/recv nodes on
       // the src/dst sides of the edge.
-      NodeDef* send = AddSend(opts, g_info, src_graph, edge, send_from,
-                              send_start_time, &status);
+      NodeDef* send = AddSend(opts, g_info, src_graph, edge, send_from, send_start_time, &status);
       if (!status.ok()) return status;
 
+      //////////////
+      // ADD RECV //
+      //////////////
+
+      // recv is identity node
       NodeDef* real_recv = nullptr;
-      NodeDef* recv =
-          AddRecv(opts, g_info, dst_graph, edge, &real_recv, &status);
+      NodeDef* recv = AddRecv(opts, g_info, dst_graph, edge, &real_recv, &status);
       if (!status.ok()) return status;
 
       // Fix up the control flow edge.
@@ -1120,8 +1135,7 @@ Status Partition(const PartitionOptions& opts, Graph* g,
         // Redirect control edge to the real recv since this is not the same
         // device send/recv.
         --num_control_flow_edges;
-        AddInput(real_recv, control_flow_edge->src()->name(),
-                 Graph::kControlSlot);
+        AddInput(real_recv, control_flow_edge->src()->name(), Graph::kControlSlot);
       }
 
       if (!edge->IsControlEdge() &&
@@ -1163,8 +1177,7 @@ Status Partition(const PartitionOptions& opts, Graph* g,
     // Add back the control edges for control flow that are not used.
     if (control_flow_edge != nullptr) {
       for (int i = 0; i < num_control_flow_edges; ++i) {
-        AddInput(dst_def, control_flow_edge->src()->name(),
-                 Graph::kControlSlot);
+        AddInput(dst_def, control_flow_edge->src()->name(), raph::kControlSlot);
       }
     }
   }
