@@ -54,6 +54,7 @@ class GrpcMasterService : public AsyncServiceInterface {
         default_session_config_(default_session_config) {
     builder->RegisterService(&master_service_);
     cq_ = builder->AddCompletionQueue();
+    LOG(INFO) << "GrpcMasterService/ctor";
   }
 
   ~GrpcMasterService() override { delete shutdown_alarm_; }
@@ -102,6 +103,7 @@ class GrpcMasterService : public AsyncServiceInterface {
   } while (0)
 
   void HandleRPCsLoop() override {
+    // LOG(INFO) << "GrpcMasterService/HandleRPCsLoop";
     ENQUEUE_REQUEST(CreateSession, true);
     ENQUEUE_REQUEST(ExtendSession, false);
     for (int i = 0; i < 100; ++i) {
@@ -149,6 +151,8 @@ class GrpcMasterService : public AsyncServiceInterface {
   // RPC handler for creating a session.
   void CreateSessionHandler(
       MasterCall<CreateSessionRequest, CreateSessionResponse>* call) {
+
+    LOG(INFO) << "GrpcMasterService/CreateSessionHandler";
     CreateSessionRequest* rewritten_req = new CreateSessionRequest;
     rewritten_req->mutable_config()->MergeFrom(default_session_config_);
     rewritten_req->MergeFrom(call->request);

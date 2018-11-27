@@ -36,13 +36,16 @@ const char* const kSchemePrefix = "grpc://";
 const size_t kSchemePrefixLength = strlen(kSchemePrefix);
 
 GrpcSession::GrpcSession(const SessionOptions& options)
-    : options_(options), current_graph_version_(-1) {}
+    : options_(options), current_graph_version_(-1) {
+  LOG(INFO) << "GrpcSession/Create";
+}
 
 GrpcSession::~GrpcSession() {}
 
 /* static */
 Status GrpcSession::Create(const SessionOptions& options,
                            std::unique_ptr<GrpcSession>* out_session) {
+  LOG(INFO) << "GrpcSession/Create/out_session";
   std::unique_ptr<GrpcSession> session(new GrpcSession(options));
   std::unique_ptr<MasterInterface> master;
   // For testing, we enable the client to disable the use of the local
@@ -124,6 +127,7 @@ Status GrpcSession::CreateImpl(CallOptions* call_options,
 }
 
 Status GrpcSession::Create(const GraphDef& graph) {
+  LOG(INFO) << "GrpcSession/Create/GraphDef";
   CallOptions call_options;
   call_options.SetTimeout(options_.config.operation_timeout_in_ms());
   return CreateImpl(&call_options, graph);

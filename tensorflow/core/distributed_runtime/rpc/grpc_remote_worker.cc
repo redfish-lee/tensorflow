@@ -56,7 +56,11 @@ class GrpcRemoteWorker : public WorkerInterface {
         recvtensor_(Method(GrpcWorkerMethod::kRecvTensor)),
         logging_(Method(GrpcWorkerMethod::kLogging)),
         tracing_(Method(GrpcWorkerMethod::kTracing)),
-        logger_(logger) {}
+        logger_(logger) {
+        
+        
+      // LOG(INFO) << "GrpcRemoteWorker/ctor";
+    }
 
   ~GrpcRemoteWorker() override {}
 
@@ -116,6 +120,7 @@ class GrpcRemoteWorker : public WorkerInterface {
   void RecvTensorAsync(CallOptions* call_opts, const RecvTensorRequest* request,
                        TensorResponse* response, StatusCallback done) override {
     VLOG(1) << "RecvTensorAsync req: " << request->DebugString();
+    LOG(INFO) << "RecvTensorAsync req: " << request->DebugString();
     int64 start_usec = Env::Default()->NowMicros();
     // Type-specialized logging for this method.
     bool logging_active = logger_->LoggingActive() || VLOG_IS_ON(2);
@@ -163,8 +168,12 @@ class GrpcRemoteWorker : public WorkerInterface {
         }
         VLOG(2) << "done callback, req: " << request->DebugString()
                 << " response " << response->metadata().DebugString();
+
         done(s);
       };
+    
+      LOG(INFO) << "done callback, req: " << request->DebugString()
+                << " response " << response->metadata().DebugString();
       cb_to_use = &wrapper_done;
     }
 

@@ -118,7 +118,8 @@ class GrpcServer : public ServerInterface {
 
  private:
   // The overall server configuration.
-  const ServerDef server_def_;
+  // used to be const, remove it for elastic reassigment
+  ServerDef server_def_;
   Env* env_;
 
   // The port to which this server is bound.
@@ -155,7 +156,7 @@ class GrpcServer : public ServerInterface {
   
   // Create monitor thread for cluster file changes
   std::unique_ptr<std::thread> monitor_thread_;
-  const string target_dir  = "/home/hylee/elastic-dev/userprog/config";
+  const string target_dir  = "/home/redfish/elastic-dev/userprog/config/";
   const string target_file = "cluster.cfg";
 
   // Signal monitor while loop

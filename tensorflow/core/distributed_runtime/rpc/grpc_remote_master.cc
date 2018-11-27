@@ -36,7 +36,11 @@ class GrpcRemoteMaster : public MasterInterface {
 
  public:
   explicit GrpcRemoteMaster(const SharedGrpcChannelPtr& client_channel)
-      : stub_(grpc::MasterService::NewStub(client_channel)) {}
+      : stub_(grpc::MasterService::NewStub(client_channel)) {
+      
+    LOG(INFO) << "GrpcRemoteMaster/ctor";
+  }
+  
 
   ~GrpcRemoteMaster() override {}
 

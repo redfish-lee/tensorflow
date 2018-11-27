@@ -57,6 +57,7 @@ class GrpcWorkerService : public AsyncServiceInterface {
  public:
   GrpcWorkerService(GrpcWorker* worker, ::grpc::ServerBuilder* builder)
       : is_shutdown_(false) {
+    LOG(INFO) << "GrpcWorkerService/ctor";
     builder->RegisterService(&worker_service_);
     for (int i = 0; i < kGrpcWorkerServiceThreadCount; i++) {
       threads_.emplace_back(
@@ -126,6 +127,7 @@ class GrpcWorkerService : public AsyncServiceInterface {
         : worker_(worker),
           worker_service_(worker_service),
           is_shutdown_(false) {
+      // LOG(INFO) << "GrpcWorkerService/GrpcWorkerServiceThread";
       cq_ = builder->AddCompletionQueue();
     }
 
@@ -147,6 +149,7 @@ class GrpcWorkerService : public AsyncServiceInterface {
 
    private:
     void HandleRPCsLoop() {
+      // LOG(INFO) << "GrpcWorkerService/HandleRPCsLoop";
       // TODO(ncteisen): This may require performance engineering. We can
       // change the number of threads, the number of handlers per thread,
       // or even decide to specialize certain threads to certain methods.

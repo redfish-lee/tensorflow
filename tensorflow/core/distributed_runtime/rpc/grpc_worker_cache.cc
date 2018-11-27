@@ -43,7 +43,10 @@ class GrpcWorkerCache : public WorkerCachePartial {
         local_worker_(local_worker),
         channel_cache_(channel_cache),
         threads_(kGrpcWorkerCacheThreadCount),
-        next_round_robin_assignment_(0) {}
+        next_round_robin_assignment_(0) {
+  
+    // LOG(INFO) << "GrpcWorkerCache/ctor";
+  }
 
   // Explicit destructor to control destruction order.
   ~GrpcWorkerCache() override {
@@ -56,6 +59,7 @@ class GrpcWorkerCache : public WorkerCachePartial {
   }
 
   WorkerInterface* CreateWorker(const string& target) override {
+    // LOG(INFO) << "GrpcWorkerCache/CreateWorker";
     if (target == local_target_) {
       return local_worker_;
     } else {
@@ -90,6 +94,7 @@ class GrpcWorkerCache : public WorkerCachePartial {
   class GrpcWorkerCacheThread {
    public:
     GrpcWorkerCacheThread() {
+      // LOG(INFO) << "GrpcWorkerCache/GrpcWorkerCacheThread";
       thread_.reset(Env::Default()->StartThread(
           ThreadOptions(), "grpc_worker_cache", [this]() {
             void* tag;

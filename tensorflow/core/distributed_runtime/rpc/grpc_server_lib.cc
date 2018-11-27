@@ -1,4 +1,6 @@
 /* Copyright 2016 The TensorFlow Authors. All Rights Reserved.
+ * gle::protobuf::util::JsonParseOptions options2;
+ *   JsonStringToMessage(json_string, &sr2, options2);
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -28,8 +30,7 @@ limitations under the License.
 #include <string>
 #include <fstream>
 #include <iostream>
-#include <google/protobuf/util/json_util.h>
-#include "tensorflow/core/protobuf/cluster.pb.h"
+#include "third_party/include/json.hpp"
 #include "tensorflow/core/lib/strings/str_util.h"
 #include "tensorflow/core/lib/strings/strcat.h"
 
@@ -90,7 +91,7 @@ GrpcServer::GrpcServer(const ServerDef& server_def, Env* env)
   // target_dir and target_file should be initialized here later
 
   LOG(INFO) << "[GrpcServer/ctor] create thread and pass params";
-  
+
   monitor_thread_.reset(
           new std::thread(monitor_func,
               std::ref(target_dir), std::ref(target_file)));
@@ -168,6 +169,12 @@ Status GrpcServer::Init(
     return errors::Internal("Could not parse worker name.");
   }
 
+  LOG(INFO) << "GrpcServer/server_def_.cluster().DebugString(): \n" 
+      << server_def_.cluster().DebugString();
+
+  LOG(INFO) << "GrpcServer/server_def_: \n" 
+      << server_def_.DebugString();
+
   // Look up the port that has been requested for this task in `server_def_`.
   int requested_port = -1;
   for (const auto& job : server_def_.cluster().job()) {
@@ -225,6 +232,8 @@ Status GrpcServer::Init(
   if (service_func != nullptr) {
     service_func(&worker_env_, &builder);
   }
+
+  LOG(INFO) << "Server Builder BuildAndStart";
   server_ = builder.BuildAndStart();
 
   if (!server_) {
@@ -236,8 +245,10 @@ Status GrpcServer::Init(
   TF_RETURN_IF_ERROR(
       WorkerCacheFactory(worker_cache_factory_options, &worker_cache));
   CHECK_NE(nullptr, worker_cache);
+  LOG(INFO) << "Get worker_cache from WorkerCacheFactory";
 
   // Set up worker environment.
+  LOG(INFO) << "Setup worker env";
   worker_env_.session_mgr = new SessionMgr(
       &worker_env_, SessionMgr::WorkerNameFromServerDef(server_def_),
       std::unique_ptr<WorkerCacheInterface>(worker_cache),
@@ -248,6 +259,7 @@ Status GrpcServer::Init(
   worker_env_.compute_pool = ComputePool(sess_opts);
 
   // Finish setting up master environment.
+  LOG(INFO) << "Setup master env: master_session_factory";
   master_env_.ops = OpRegistry::Global();
   master_env_.worker_cache = worker_cache;
   master_env_.master_session_factory =
@@ -261,6 +273,7 @@ Status GrpcServer::Init(
                                  std::move(worker_cache), std::move(device_set),
                                  stats_factory);
       };
+  LOG(INFO) << "Setup master env: worker_cache_factory";
   master_env_.worker_cache_factory =
       [this](const WorkerCacheFactoryOptions& options,
              WorkerCacheInterface** worker_cache) {
@@ -362,7 +375,7 @@ Status GrpcServer::Start() {
           env_->StartThread(ThreadOptions(), "TF_worker_service",
                             [this] { worker_service_->HandleRPCsLoop(); }));
       state_ = STARTED;
-      LOG(INFO) << "[my] Started server with target: " << target();
+      LOG(INFO) << "[GrpcServer::Start] Started server with target: " << target();
       return Status::OK();
     }
     case STARTED:
@@ -505,6 +518,8 @@ Status GrpcServer::monitor_func(const string& filepath,
   return Status::OK();
 }
 
+using json = nlohmann::json;
+
 // Get new cluster content
 /* static */
 Status GrpcServer::ClusterUpdate(const string& filepath, 
@@ -512,12 +527,25 @@ Status GrpcServer::ClusterUpdate(const string& filepath,
 
   string full_path = strings::StrCat(filepath, filename);
   std::ifstream ifs(full_path);
-  std::string cluster;
-  cluster.assign((std::istreambuf_iterator<char>(ifs)), 
-                 (std::istreambuf_iterator<char>()));
+  std::string cluster_str;
+  cluster_str.assign((std::istreambuf_iterator<char>(ifs)),
+                     (std::istreambuf_iterator<char>()));
+  
+  LOG(INFO) << "[GrpcServer/ClusterUpdate] (str): " << cluster_str;
 
- 
-  LOG(INFO) << "[ClusterUpdate] new content: " << cluster; 
+  auto cls_json = json::parse(cluster_str);
+  std::cout << "ps: " << cls_json["ps"] << std::endl;
+  LOG(INFO) << "ps: " << cls_json["ps"];
+  std::cout << "worker: " << cls_json["worker"] << std::endl;
+  LOG(INFO) << "worker: " << cls_json["worker"];
+  
+  LOG(INFO) << "=== json parser ===";
+  for (unsigned int i=0; i<cls_json["worker"].size(); i++){
+    std::string host_port = cls_json["worker"][i];
+    std::cout << "worker " << i << ": " << host_port << std::endl;
+    LOG(INFO) << "worker: " << cls_json["worker"];
+  }
+
   return Status::OK();
 }
 
