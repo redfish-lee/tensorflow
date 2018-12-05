@@ -1177,7 +1177,7 @@ Status Partition(const PartitionOptions& opts, Graph* g,
     // Add back the control edges for control flow that are not used.
     if (control_flow_edge != nullptr) {
       for (int i = 0; i < num_control_flow_edges; ++i) {
-        AddInput(dst_def, control_flow_edge->src()->name(), raph::kControlSlot);
+        AddInput(dst_def, control_flow_edge->src()->name(), Graph::kControlSlot);
       }
     }
   }
