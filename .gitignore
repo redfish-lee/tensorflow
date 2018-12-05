@@ -28,6 +28,8 @@ Podfile.lock
 /tensorflow/contrib/lite/examples/ios/simple/data/*.tflite
 xcuserdata/**
 
+my_build/
+
 # Android
 .gradle
 .idea
