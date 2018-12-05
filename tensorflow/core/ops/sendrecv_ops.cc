@@ -120,4 +120,81 @@ client_terminated: If set to true, this indicates that the node was added
   locally by the caller.
 )doc");
 
+// New OP registration for {Send, Recv} nodes, which use SendTensor Service
+REGISTER_OP("_stSend")
+    .Input("tensor: T")
+    .Attr("T: type")
+    .Attr("tensor_name: string")
+    .Attr("send_device: string")
+    .Attr("send_device_incarnation: int")
+    .Attr("recv_device: string")
+    .Attr("client_terminated: bool = false")
+    .SetIsStateful()
+    .SetShapeFn(shape_inference::UnknownShape)
+    .Doc(R"doc(
+Sends the named tensor from send_device to recv_device.
+(st stands for sendTensor)
+
+Active push Tensor to ps instead of waiting for recv's request.
+Used only when send_device is worker and recv_device is parameter server.
+)doc");
+
+REGISTER_OP("_stRecv")
+    .Output("tensor: tensor_type")
+    .Attr("tensor_type: type")
+    .Attr("tensor_name: string")
+    .Attr("send_device: string")
+    .Attr("send_device_incarnation: int")
+    .Attr("recv_device: string")
+    .Attr("client_terminated: bool = false")
+    .SetIsStateful()
+    .SetShapeFn(shape_inference::UnknownShape)
+    .Doc(R"doc(
+Receives the named tensor from send_device on recv_device.
+(st stands for sendTensor)
+
+Passive waiting for request of _stSend on workers.
+Used only when send_device is worker and recv_device is parameter server.
+)doc");
+
+REGISTER_OP("_stHostSend")
+    .Input("tensor: T")
+    .Attr("T: type")
+    .Attr("tensor_name: string")
+    .Attr("send_device: string")
+    .Attr("send_device_incarnation: int")
+    .Attr("recv_device: string")
+    .Attr("client_terminated: bool = false")
+    .SetIsStateful()
+    .SetShapeFn(shape_inference::UnknownShape)
+    .Doc(R"doc(
+Sends the named tensor from send_device to recv_device.
+
+_stHostSend requires its input on host memory whereas _stSend requires its
+input on device memory.
+
+Active push Tensor to ps instead of waiting for recv's request.
+Used only when send_device is worker and recv_device is parameter server.
+)doc");
+
+REGISTER_OP("_stHostRecv")
+    .Output("tensor: tensor_type")
+    .Attr("tensor_type: type")
+    .Attr("tensor_name: string")
+    .Attr("send_device: string")
+    .Attr("send_device_incarnation: int")
+    .Attr("recv_device: string")
+    .Attr("client_terminated: bool = false")
+    .SetIsStateful()
+    .SetShapeFn(shape_inference::UnknownShape)
+    .Doc(R"doc(
+Receives the named tensor from send_device on recv_device.
+
+_stHostRecv requires its input on host memory whereas _stRecv requires its
+input on device memory.
+
+Passive waiting for request of _stSend on workers.
+Used only when send_device is worker and recv_device is parameter server.
+)doc");
+
 }  // end namespace tensorflow
