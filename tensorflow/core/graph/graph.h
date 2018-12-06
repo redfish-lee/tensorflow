@@ -145,8 +145,17 @@ class Node {
   bool IsNextIteration() const { return class_ == NC_NEXT_ITERATION; }
   bool IsLoopCond() const { return class_ == NC_LOOP_COND; }
   bool IsControlTrigger() const { return class_ == NC_CONTROL_TRIGGER; }
-  bool IsSend() const { return class_ == NC_SEND || class_ == NC_HOST_SEND; }
-  bool IsRecv() const { return class_ == NC_RECV || class_ == NC_HOST_RECV; }
+
+  bool IsSend() const { return class_ == NC_SEND 
+                            || class_ == NC_HOST_SEND 
+                            || class_ == NC_ST_SEND
+                            || class_ == NC_HOST_ST_SEND; }
+
+  bool IsRecv() const { return class_ == NC_RECV 
+                            || class_ == NC_HOST_RECV
+                            || class_ == NC_ST_RECV
+                            || class_ == NC_HOST_ST_RECV; }
+
   bool IsConstant() const { return class_ == NC_CONSTANT; }
   bool IsVariable() const { return class_ == NC_VARIABLE; }
   bool IsIdentity() const { return class_ == NC_IDENTITY; }
@@ -160,8 +169,22 @@ class Node {
            (IsSwitch() || IsMerge() || IsEnter() || IsExit() ||
             IsNextIteration());
   }
-  bool IsHostSend() const { return class_ == NC_HOST_SEND; }
-  bool IsHostRecv() const { return class_ == NC_HOST_RECV; }
+
+  // bool IsHostSend() const { return class_ == NC_HOST_SEND; }
+  // bool IsHostRecv() const { return class_ == NC_HOST_RECV; }
+
+  bool IsHostSend() const { 
+      return class_ == NC_HOST_SEND || class_ == NC_HOST_ST_SEND; }
+  bool IsHostRecv() const { 
+      return class_ == NC_HOST_RECV || class_ == NC_HOST_ST_RECV; }
+
+  // for _stSend / _stRecv helper function
+  bool IsStSend() const { return class_ == NC_ST_SEND; }
+  bool IsStRecv() const { return class_ == NC_ST_RECV; }
+
+  bool IsHostStSend() const { return class_ == NC_HOST_ST_SEND; }
+  bool IsHostStRecv() const { return class_ == NC_HOST_ST_RECV; }
+
 
   bool IsMetadata() const { return class_ == NC_METADATA; }
 
@@ -226,6 +249,10 @@ class Node {
     NC_HOST_SEND,
     NC_RECV,
     NC_HOST_RECV,
+    NC_ST_SEND,
+    NC_HOST_ST_SEND,
+    NC_ST_RECV,
+    NC_HOST_ST_RECV,
     NC_CONSTANT,
     NC_VARIABLE,
     NC_IDENTITY,
