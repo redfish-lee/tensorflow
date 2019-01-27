@@ -13,12 +13,19 @@ See the License for the specific language governing permissions and
 limitations under the License.
 ==============================================================================*/
 
+// ONLY USED IN "ELASTIC" TENSORFLOW, by Leo
+
+// St, which stands for SendTensor, (CamelCase)
+// A service-related Op registration, named as StSend, StRecv, etc.
+// It's similar to original Send, Recv operations.
+// Refer to tensorflow/core/ops/sendrecv_ops.cc for more details.
+
 #include "tensorflow/core/framework/common_shape_fns.h"
 #include "tensorflow/core/framework/op.h"
 
 namespace tensorflow {
 
-REGISTER_OP("_Send")
+REGISTER_OP("_StSend")
     .Input("tensor: T")
     .Attr("T: type")
     .Attr("tensor_name: string")
@@ -30,6 +37,8 @@ REGISTER_OP("_Send")
     .SetShapeFn(shape_inference::UnknownShape)
     .Doc(R"doc(
 Sends the named tensor from send_device to recv_device.
+send_device acts as a "client", which is probably a worker, 
+will send named tensor wrapped in a request. 
 
 tensor: The tensor to send.
 tensor_name: The name of the tensor to send.
@@ -42,7 +51,7 @@ client_terminated: If set to true, this indicates that the node was added
   locally by the caller.
 )doc");
 
-REGISTER_OP("_Recv")
+REGISTER_OP("_StRecv")
     .Output("tensor: tensor_type")
     .Attr("tensor_type: type")
     .Attr("tensor_name: string")
@@ -54,6 +63,8 @@ REGISTER_OP("_Recv")
     .SetShapeFn(shape_inference::UnknownShape)
     .Doc(R"doc(
 Receives the named tensor from send_device on recv_device.
+recv_device acts as a "server", which is probably a parameterServer, 
+will receive named tensor wrapped from a request.
 
 tensor: The tensor to receive.
 tensor_name: The name of the tensor to receive.
@@ -66,7 +77,7 @@ client_terminated: If set to true, this indicates that the node was added
   locally by the caller.
 )doc");
 
-REGISTER_OP("_HostSend")
+REGISTER_OP("_StHostSend")
     .Input("tensor: T")
     .Attr("T: type")
     .Attr("tensor_name: string")
@@ -78,8 +89,10 @@ REGISTER_OP("_HostSend")
     .SetShapeFn(shape_inference::UnknownShape)
     .Doc(R"doc(
 Sends the named tensor from send_device to recv_device.
+send_device acts as a "client", which is probably a worker, 
+will send named tensor wrapped in a request. 
 
-_HostSend requires its input on host memory whereas _Send requires its
+_StHostSend requires its input on host memory whereas _StSend requires its
 input on device memory.
 
 tensor: The tensor to send.
@@ -93,7 +106,7 @@ client_terminated: If set to true, this indicates that the node was added
   locally by the caller.
 )doc");
 
-REGISTER_OP("_HostRecv")
+REGISTER_OP("_StHostRecv")
     .Output("tensor: tensor_type")
     .Attr("tensor_type: type")
     .Attr("tensor_name: string")
@@ -105,8 +118,10 @@ REGISTER_OP("_HostRecv")
     .SetShapeFn(shape_inference::UnknownShape)
     .Doc(R"doc(
 Receives the named tensor from send_device on recv_device.
+recv_device acts as a "server", which is probably a parameterServer, 
+will receive named tensor wrapped from a request.
 
-_HostRecv requires its input on host memory whereas _Recv requires its
+_StHostRecv requires its input on host memory whereas _StRecv requires its
 input on device memory.
 
 tensor: The tensor to receive.
