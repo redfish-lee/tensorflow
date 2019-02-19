@@ -47,6 +47,36 @@ class RecvOp : public AsyncOpKernel {
   TF_DISALLOW_COPY_AND_ASSIGN(RecvOp);
 };
 
+
+// StSendOp, StRecvOp are both "AsyncOpKernel" for some concerns, ttyl.
+// Lives on Worker (only)
+class StSendOp : public AsyncOpKernel {
+ public:
+  explicit StSendOp(OpKernelConstruction* ctx);
+  void ComputeAsync(OpKernelContext* ctx, DoneCallback done) override;
+
+ private:
+  string key_prefix_;
+  Rendezvous::ParsedKey parsed_key_;
+  bool hostmem_sendrecv_;
+
+  TF_DISALLOW_COPY_AND_ASSIGN(StSendOp);
+};
+
+// Lives on ParameterServer (only)
+class StRecvOp : public AsyncOpKernel {
+ public:
+  explicit StRecvOp(OpKernelConstruction* ctx);
+  void ComputeAsync(OpKernelContext* ctx, DoneCallback done) override;
+
+ private:
+  string key_prefix_;
+  Rendezvous::ParsedKey parsed_key_;
+  bool hostmem_sendrecv_;
+
+  TF_DISALLOW_COPY_AND_ASSIGN(StRecvOp);
+};
+
 }  // end namespace tensorflow
 
 #endif  // TENSORFLOW_KERNELS_SENDRECV_OPS_H_
