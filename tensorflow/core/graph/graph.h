@@ -146,15 +146,22 @@ class Node {
   bool IsLoopCond() const { return class_ == NC_LOOP_COND; }
   bool IsControlTrigger() const { return class_ == NC_CONTROL_TRIGGER; }
 
+  // Includes all Send
   bool IsSend() const { return class_ == NC_SEND 
                             || class_ == NC_HOST_SEND 
                             || class_ == NC_ST_SEND
-                            || class_ == NC_HOST_ST_SEND; }
+                            || class_ == NC_ST_HOST_SEND; }
 
+  // Includes all Recv
   bool IsRecv() const { return class_ == NC_RECV 
                             || class_ == NC_HOST_RECV
                             || class_ == NC_ST_RECV
-                            || class_ == NC_HOST_ST_RECV; }
+                            || class_ == NC_ST_HOST_RECV; }
+
+  bool IsStSend() const { 
+      return class_ == NC_ST_SEND || class_ == NC_ST_HOST_SEND; }
+  bool IsStRecv() const { 
+      return class_ == NC_ST_RECV || class_ == NC_ST_HOST_RECV; }
 
   bool IsConstant() const { return class_ == NC_CONSTANT; }
   bool IsVariable() const { return class_ == NC_VARIABLE; }
@@ -170,21 +177,14 @@ class Node {
             IsNextIteration());
   }
 
-  // bool IsHostSend() const { return class_ == NC_HOST_SEND; }
-  // bool IsHostRecv() const { return class_ == NC_HOST_RECV; }
-
+  // Includes both original and new OP of sendTensor
   bool IsHostSend() const { 
-      return class_ == NC_HOST_SEND || class_ == NC_HOST_ST_SEND; }
+      return class_ == NC_HOST_SEND || class_ == NC_ST_HOST_SEND; }
   bool IsHostRecv() const { 
-      return class_ == NC_HOST_RECV || class_ == NC_HOST_ST_RECV; }
+      return class_ == NC_HOST_RECV || class_ == NC_ST_HOST_RECV; }
 
-  // for _stSend / _stRecv helper function
-  bool IsStSend() const { return class_ == NC_ST_SEND; }
-  bool IsStRecv() const { return class_ == NC_ST_RECV; }
-
-  bool IsHostStSend() const { return class_ == NC_HOST_ST_SEND; }
-  bool IsHostStRecv() const { return class_ == NC_HOST_ST_RECV; }
-
+  bool IsStHostSend() const { return class_ == NC_ST_HOST_SEND; }
+  bool IsStHostRecv() const { return class_ == NC_ST_HOST_RECV; }
 
   bool IsMetadata() const { return class_ == NC_METADATA; }
 
@@ -250,9 +250,9 @@ class Node {
     NC_RECV,
     NC_HOST_RECV,
     NC_ST_SEND,
-    NC_HOST_ST_SEND,
+    NC_ST_HOST_SEND,
     NC_ST_RECV,
-    NC_HOST_ST_RECV,
+    NC_ST_HOST_RECV,
     NC_CONSTANT,
     NC_VARIABLE,
     NC_IDENTITY,
@@ -694,7 +694,6 @@ class Graph {
 // node/edge attributes in a graph, particularly node names.
 
 // Helper routines
-
 inline bool IsSource(const Node* node) { return node->IsSource(); }
 inline bool IsSink(const Node* node) { return node->IsSink(); }
 inline bool IsSwitch(const Node* node) { return node->IsSwitch(); }
@@ -704,13 +703,23 @@ inline bool IsExit(const Node* node) { return node->IsExit(); }
 inline bool IsNextIteration(const Node* n) { return n->IsNextIteration(); }
 inline bool IsLoopCond(const Node* node) { return node->IsLoopCond(); }
 inline bool IsControlTrigger(const Node* n) { return n->IsControlTrigger(); }
+
+// Send, Recv, StSend, StRecv included.
 inline bool IsSend(const Node* node) { return node->IsSend(); }
 inline bool IsRecv(const Node* node) { return node->IsRecv(); }
 inline bool IsHostSend(const Node* node) { return node->IsHostSend(); }
 inline bool IsHostRecv(const Node* node) { return node->IsHostRecv(); }
 
+// "SendTensor" nodes ONLY
+inline bool IsStSend(const Node* node) { return node->IsStSend(); }
+inline bool IsStRecv(const Node* node) { return node->IsStRecv(); }
+inline bool IsStHostSend(const Node* node) { return node->IsStHostSend(); }
+inline bool IsStHostRecv(const Node* node) { return node->IsStHostRecv(); }
+
 // True for Nodes that mediate the transfer of values between processes.
 inline bool IsTransferNode(const Node* n) { return IsSend(n) || IsRecv(n); }
+inline bool IsStTransferNode(const Node* n) { 
+  return IsStSend(n) || IsStRecv(n); }
 
 inline bool IsConstant(const Node* node) { return node->IsConstant(); }
 inline bool IsVariable(const Node* node) { return node->IsVariable(); }
