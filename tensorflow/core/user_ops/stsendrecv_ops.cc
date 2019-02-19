@@ -13,7 +13,8 @@ See the License for the specific language governing permissions and
 limitations under the License.
 ==============================================================================*/
 
-// ONLY USED IN "ELASTIC" TENSORFLOW, by Leo
+// (redfishlee)
+// ONLY USED IN "ELASTIC" TENSORFLOW
 
 // St, which stands for SendTensor, (CamelCase)
 // A service-related Op registration, named as StSend, StRecv, etc.
