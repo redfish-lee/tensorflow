@@ -410,6 +410,20 @@ bool DeviceNameUtils::SplitDeviceName(StringPiece name, string* task,
   return false;
 }
 
+/* static */
+bool DeviceNameUtils::SplitJobName(StringPiece name, string* job) {
+  ParsedName pn;
+  if (ParseFullName(name, &pn) && pn.has_type && pn.has_id) {
+    job->clear();
+    job->reserve((pn.has_job ? (5 + pn.job.size()) : 0));
+    if (pn.has_job) {
+      strings::StrAppend(job, pn.job);
+    }
+    return true;
+  }
+  return false;
+}
+
 std::vector<string> DeviceNameUtils::GetNamesForDeviceMappings(
     const ParsedName& pn) {
   if (pn.has_job && pn.has_replica && pn.has_task && pn.has_type && pn.has_id) {

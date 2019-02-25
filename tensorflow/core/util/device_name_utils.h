@@ -152,6 +152,10 @@ class DeviceNameUtils {
   // the task component is empty, but it requires the relative device
   // component to be fully specified.
   static bool SplitDeviceName(StringPiece name, string* task, string* device);
+  
+  // True iff job name exists.
+  // This is used in partition.cc for different job type statement
+  static bool SplitJobName(StringPiece name, string* job);
 
   static string ParsedNameToString(const ParsedName& pn);
 
