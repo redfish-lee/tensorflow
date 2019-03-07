@@ -140,6 +140,29 @@ bool NeedSameDeviceSendRecv(const Edge* edge, const GraphInfo& info) {
   return false;
 }
 
+// Return true iff we meets StSend/StRecv situation,
+// which src (@Worker) and dst (@ParamServer).
+bool NeedSendTensorSendRecv(const Edge* edge) {
+  // We now only accept two job types (ps|worker).
+  const string PS = "ps";
+  const string WORKER = "worker";
+
+  const string src_device = edge->src()->assigned_device_name();
+  const string dst_device = edge->dst()->assigned_device_name();
+
+  LOG(INFO) << "src_device: " << src_device;
+  LOG(INFO) << "dst_device: " << dst_device;
+
+  bool dst_is_ps = false;
+  bool src_is_worker = false;
+  if (dst_device.find(PS) != std::string::npos) dst_is_ps = true;
+  if (src_device.find(WORKER) != std::string::npos) src_is_worker = true;
+
+  if (dst_is_ps && src_is_worker) return true;
+
+  return false;
+}
+
 // Return true iff (dst, dst_input) is specified on host memory.
 bool IsDstInputOnHost(const Edge* edge, const GraphInfo& info) {
   const Node* dst = edge->dst();
@@ -222,8 +245,15 @@ NodeDef* AddSend(const PartitionOptions& opts, const GraphInfo& g_info,
     send_from.Reset(cast->name(), 0, cast_dtype);
   }
 
-  // Add the send node.
-  const string send_op = (host_memory) ? "_HostSend" : "_Send";
+  // Add the send node (Send/StSend) with different situation.
+  string send_op;
+  if (NeedSendTensorSendRecv(edge)) {
+    send_op = (host_memory) ? "_StHostSend" : "_StSend";
+  } else {
+    send_op = (host_memory) ? "_HostSend" : "_Send";
+  }
+  LOG(INFO) << send_op;
+
   NodeDefBuilder send_builder(opts.new_name(src->name()), send_op);
   SetSendRecvAttrs(opts, edge, &send_builder);
   send_builder.Device(src->assigned_device_name()).Input(send_from);
@@ -257,8 +287,15 @@ NodeDef* AddRecv(const PartitionOptions& opts, const GraphInfo& g_info,
     host_memory = (dst_it->second == HOST_MEMORY);
   }
 
-  // Add the recv node.
-  const string recv_op = (host_memory) ? "_HostRecv" : "_Recv";
+  // Add the recv node (Recv/StRecv) with different situation.
+  string recv_op;
+  if (NeedSendTensorSendRecv(edge)) {
+    recv_op = (host_memory) ? "_StHostRecv" : "_StRecv";
+  } else {
+    recv_op = (host_memory) ? "_HostRecv" : "_Recv";
+  }
+  LOG(INFO) << recv_op;
+
   NodeDefBuilder recv_builder(opts.new_name(src->name()), recv_op);
   SetSendRecvAttrs(opts, edge, &recv_builder);
   recv_builder.Device(dst->assigned_device_name())
@@ -266,6 +303,7 @@ NodeDef* AddRecv(const PartitionOptions& opts, const GraphInfo& g_info,
   NodeDef* recv = gdef->add_node();
   *status = recv_builder.Finalize(recv);
   if (!status->ok()) return nullptr;
+
   *real_recv = recv;
 
   // Add the cast node (from cast_dtype to dtype) or an Identity node.
@@ -904,10 +942,13 @@ Status AddControlEdges(const PartitionOptions& opts,
 // if possible.
 void SetIncarnation(const PartitionOptions& opts, NodeDef* ndef) {
   StringPiece op(ndef->op());
-  if (op != "_Send" && op != "_Recv") {
+
+  if (op != "_Send" && op != "_Recv" && op != "_StSend" && op != "_StRecv") {
     // Not related to send/recv.
     return;
   }
+  
+  LOG(INFO) << op;
   string send_device;
   if (!GetNodeAttr(*ndef, "send_device", &send_device).ok()) {
     // No known send_device. The runtime will detect it later.
@@ -969,6 +1010,7 @@ Status Partition(const PartitionOptions& opts, Graph* g,
   int32 num_data = 0;
   int32 num_control = 0;
   for (const Node* dst : g->op_nodes()) {
+    // string of node's location
     dstp = opts.node_to_loc(dst);
 
     // (*partitions): unordered_map
@@ -1082,10 +1124,10 @@ Status Partition(const PartitionOptions& opts, Graph* g,
         continue;
       }
 
+      // different edge cases, different send_from Node
       NodeDefBuilder::NodeOut send_from;
       if (edge->IsControlEdge()) {
-        // Case 3
-        // src --(Control Edge)-> Dummy -> send
+        // Case 3: src -(Control Edge)-> Dummy -> send
         // Insert a dummy const node that will generate a tiny
         // data element to be sent from send to recv.
         VLOG(1) << "Send/Recv control: " << src->assigned_device_name() << "["
@@ -1098,30 +1140,28 @@ Status Partition(const PartitionOptions& opts, Graph* g,
           AddNodeAttr("_start_time", send_start_time, dummy);
         }
         AddInput(dummy, src->name(), Graph::kControlSlot);
-        send_from.Reset(dummy->name(), 0, DT_FLOAT);
+        send_from.Reset(dummy->name(), 0, DT_FLOAT); 
       } else {
-
-
-        // Case 2, add send node directly
-        // src -> send
+        // Case 2: src -> send node directly
         send_from.Reset(src->name(), edge->src_output(), EdgeType(edge));
       }
 
-      //////////////
-      // ADD SEND //
-      //////////////
+      // (redfishlee)
+      // Here, we modify original AddSend/AddRecv for further conditionals
+      // using NeedSendTensorSendRecv
+
+      // ADD SEND
       // Need to split edge by placing matching send/recv nodes on
       // the src/dst sides of the edge.
-      NodeDef* send = AddSend(opts, g_info, src_graph, edge, send_from, send_start_time, &status);
+      NodeDef* send = AddSend(opts, g_info, src_graph, edge, send_from, 
+                              send_start_time, &status);
       if (!status.ok()) return status;
 
-      //////////////
-      // ADD RECV //
-      //////////////
-
+      // ADD RECV
       // recv is identity node
       NodeDef* real_recv = nullptr;
-      NodeDef* recv = AddRecv(opts, g_info, dst_graph, edge, &real_recv, &status);
+      NodeDef* recv = 
+          AddRecv(opts, g_info, dst_graph, edge, &real_recv, &status);
       if (!status.ok()) return status;
 
       // Fix up the control flow edge.
@@ -1135,7 +1175,8 @@ Status Partition(const PartitionOptions& opts, Graph* g,
         // Redirect control edge to the real recv since this is not the same
         // device send/recv.
         --num_control_flow_edges;
-        AddInput(real_recv, control_flow_edge->src()->name(), Graph::kControlSlot);
+        AddInput(real_recv, control_flow_edge->src()->name(),
+                 Graph::kControlSlot);
       }
 
       if (!edge->IsControlEdge() &&
@@ -1177,7 +1218,8 @@ Status Partition(const PartitionOptions& opts, Graph* g,
     // Add back the control edges for control flow that are not used.
     if (control_flow_edge != nullptr) {
       for (int i = 0; i < num_control_flow_edges; ++i) {
-        AddInput(dst_def, control_flow_edge->src()->name(), Graph::kControlSlot);
+        AddInput(dst_def, control_flow_edge->src()->name(), 
+                 Graph::kControlSlot);
       }
     }
   }
