@@ -80,6 +80,16 @@ class SimpleRendezvous : public Rendezvous {
     done(status, Args{}, recv_args, tensor, false);
   }
 
+  void StSendAsync(const ParsedKey& key, const Args& args, 
+                   const Tensor& val, DoneCallback done) override {
+    LOG(INFO) << "SimpleRendezvous::StSendAsync";
+  }
+
+  void StRecvAsync(const ParsedKey& key, const Args& args,
+                           DoneCallback done) override {
+    LOG(INFO) << "SimpleRendezvous::StRecvAsync";
+  }
+
   void StartAbort(const Status& status) override {}
 
  private:
