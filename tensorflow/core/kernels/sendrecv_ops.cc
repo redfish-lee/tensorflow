@@ -279,15 +279,8 @@ void StSendOp::ComputeAsync(OpKernelContext* ctx, DoneCallback done) {
     VLOG(2) << "StSend " << parsed_key_.buf_;
 
     // Call rendezvous StSend to make a request to (ps) server
-    
-    // original Send
-    // Send(parsed_key_, args, ctx->input(0), ctx->is_input_dead()));
-    // return; 
-
-    // async
-    // ctx->rendezvous()->StSendAsync(parsed_key_, args
-    //                             make_stsend_callback(ctx, std::move(done)));
-
+    ctx->rendezvous()->StSendAsync(parsed_key_, args, ctx->input(0),
+                                   make_stsend_callback(ctx, std::move(done)));
   } else {
     Rendezvous::ParsedKey in_loop_parsed;
     GetRendezvousKey(key_prefix_, frame_iter, &in_loop_parsed.buf_);
@@ -295,10 +288,9 @@ void StSendOp::ComputeAsync(OpKernelContext* ctx, DoneCallback done) {
 
     OP_REQUIRES_OK_ASYNC(
         ctx, Rendezvous::ParseKey(in_loop_parsed.buf_, &in_loop_parsed), done);
-     
-    // async
-    // ctx->rendezvous()->StSendAsync(parsed_key_, args
-    //                             make_stsend_callback(ctx, std::move(done)));
+
+    ctx->rendezvous()->StSendAsync(parsed_key_, args, ctx->input(0),
+                                   make_stsend_callback(ctx, std::move(done)));
   }
 }
 
@@ -383,9 +375,8 @@ void StRecvOp::ComputeAsync(OpKernelContext* ctx, DoneCallback done) {
 
     // Callback provided by a tensor consumer waiting on the rendezvous.
     // It will be invoked when the tensor is available or a non-OK
-
-    // ctx->rendezvous()->StRecvAsync(parsed_key_, args,
-    //                              make_strecv_callback(ctx, std::move(done)));
+    ctx->rendezvous()->StRecvAsync(parsed_key_, args,
+                                   make_strecv_callback(ctx, std::move(done)));
 
   } else {
     Rendezvous::ParsedKey in_loop_parsed;
@@ -393,9 +384,9 @@ void StRecvOp::ComputeAsync(OpKernelContext* ctx, DoneCallback done) {
     VLOG(2) << "StRecv " << in_loop_parsed.buf_;
     OP_REQUIRES_OK_ASYNC(
         ctx, Rendezvous::ParseKey(in_loop_parsed.buf_, &in_loop_parsed), done);
-     
-    // ctx->rendezvous()->StRecvAsync(in_loop_parsed, args,
-    //                              make_strecv_callback(ctx, std::move(done)));
+ 
+    ctx->rendezvous()->StRecvAsync(parsed_key_, args,
+                                   make_strecv_callback(ctx, std::move(done)));
   }
 }
 
