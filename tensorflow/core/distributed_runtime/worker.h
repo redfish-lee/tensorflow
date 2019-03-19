@@ -83,6 +83,10 @@ class Worker : public WorkerInterface {
   void RecvTensorAsync(CallOptions* opts, const RecvTensorRequest* request,
                        TensorResponse* response, StatusCallback done) override;
 
+  void SendTensorAsync(CallOptions* opts, const SendTensorRequest* request,
+                       TensorResponse* response, StatusCallback done) override;
+
+
   void LoggingAsync(const LoggingRequest* request, LoggingResponse* response,
                     StatusCallback done) override;
 

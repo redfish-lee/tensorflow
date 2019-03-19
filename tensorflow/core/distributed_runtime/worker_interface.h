@@ -106,6 +106,11 @@ class WorkerInterface {
                                TensorResponse* response,
                                StatusCallback done) = 0;
 
+  virtual void SendTensorAsync(CallOptions* opts,
+                               const SendTensorRequest* request,
+                               TensorResponse* response,
+                               StatusCallback done) = 0;
+
   virtual void LoggingAsync(const LoggingRequest* request,
                             LoggingResponse* response, StatusCallback done) = 0;
 

@@ -54,6 +54,7 @@ class GrpcRemoteWorker : public WorkerInterface {
         cleanupgraph_(Method(GrpcWorkerMethod::kCleanupGraph)),
         cleanupall_(Method(GrpcWorkerMethod::kCleanupAll)),
         recvtensor_(Method(GrpcWorkerMethod::kRecvTensor)),
+        sendtensor_(Method(GrpcWorkerMethod::kSendTensor)),
         logging_(Method(GrpcWorkerMethod::kLogging)),
         tracing_(Method(GrpcWorkerMethod::kTracing)),
         logger_(logger) {
@@ -180,6 +181,11 @@ class GrpcRemoteWorker : public WorkerInterface {
     IssueRequest(request, response, recvtensor_, *cb_to_use, call_opts);
   }
 
+  void SendTensorAsync(CallOptions* call_opts, const SendTensorRequest* request,
+                       TensorResponse* response, StatusCallback done) override {
+    VLOG(0) << "SendTensorAsync req: " << request->DebugString();
+  }
+
   void LoggingAsync(const LoggingRequest* request, LoggingResponse* response,
                     StatusCallback done) override {
     IssueRequest(request, response, logging_, done);
@@ -222,6 +228,7 @@ class GrpcRemoteWorker : public WorkerInterface {
   const ::grpc::string cleanupgraph_;
   const ::grpc::string cleanupall_;
   const ::grpc::string recvtensor_;
+  const ::grpc::string sendtensor_;
   const ::grpc::string logging_;
   const ::grpc::string tracing_;
 

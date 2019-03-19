@@ -338,4 +338,15 @@ void Worker::RecvTensorAsync(CallOptions* opts,
   done(errors::Unimplemented("Worker::RecvTensorAsync()"));
 }
 
+void Worker::SendTensorAsync(CallOptions* opts,
+                             const SendTensorRequest* request,
+                             TensorResponse* response, StatusCallback done) {
+  // The base Worker class does not implement SendTensorAsync.
+  // Use a transport-specific implementation (`GrpcWorker::SendTensorAsync()`)
+  // instead.
+  done(errors::Unimplemented("Worker::SendTensorAsync()"));
+}
+
+
+
 }  // namespace tensorflow
