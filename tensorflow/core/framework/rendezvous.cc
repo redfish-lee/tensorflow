@@ -150,10 +150,20 @@ class LocalRendezvousImpl : public Rendezvous {
  public:
   explicit LocalRendezvousImpl() {}
 
+  void StSendAsync(const ParsedKey& key, const Args& args, const Tensor& val,
+                   DoneCallback done) {
+    VLOG(0) << "LocalRendezvousImpl::StSendAsync";
+  }
+
+  void StRecvAsync(const ParsedKey& key, const Args& args, DoneCallback done) { 
+    VLOG(0) << "LocalRendezvousImpl::StRecvAsync";
+  }
+
   Status Send(const ParsedKey& key, const Args& send_args, const Tensor& val,
               const bool is_dead) override {
     uint64 key_hash = KeyHash(key.FullKey());
-    VLOG(2) << "Send " << this << " " << key_hash << " " << key.FullKey();
+    VLOG(0) << "LocalRendezvousImpl::Send, "
+            << this << " " << key_hash << " " << key.FullKey();
 
     mu_.lock();
     if (!status_.ok()) {
@@ -196,7 +206,8 @@ class LocalRendezvousImpl : public Rendezvous {
   void RecvAsync(const ParsedKey& key, const Args& recv_args,
                  DoneCallback done) override {
     uint64 key_hash = KeyHash(key.FullKey());
-    VLOG(2) << "Recv " << this << " " << key_hash << " " << key.FullKey();
+    VLOG(0) << "LocalRendezvousImpl::RecvAsync, "
+            << this << " " << key_hash << " " << key.FullKey();
 
     mu_.lock();
     if (!status_.ok()) {

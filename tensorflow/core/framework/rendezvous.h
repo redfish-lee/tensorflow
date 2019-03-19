@@ -110,6 +110,14 @@ class Rendezvous : public core::RefCounted {
   virtual void RecvAsync(const ParsedKey& key, const Args& args,
                          DoneCallback done) = 0;
 
+  // New Rendezvous virtual method for StSendOp/StRecvOp,
+  // which might define in BaseRemoteRendezvous
+  virtual void StSendAsync(const ParsedKey& key, const Args& args, 
+                           const Tensor& val, DoneCallback done) = 0;
+
+  virtual void StRecvAsync(const ParsedKey& key, const Args& args,
+                           DoneCallback done) = 0;
+
   // Synchronous wrapper for RecvAsync.
   Status Recv(const ParsedKey& key, const Args& args, Tensor* val,
               bool* is_dead, int64 timeout_ms);
