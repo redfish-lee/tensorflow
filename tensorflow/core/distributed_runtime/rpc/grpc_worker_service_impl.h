@@ -117,6 +117,7 @@ enum class GrpcWorkerMethod {
   kCleanupGraph,
   kCleanupAll,
   kRecvTensor,
+  kSendTensor,
   kLogging,
   kTracing,
 };
