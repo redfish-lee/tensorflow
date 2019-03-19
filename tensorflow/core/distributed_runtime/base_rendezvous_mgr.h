@@ -37,7 +37,7 @@ limitations under the License.
 namespace tensorflow {
 
 class BaseRemoteRendezvous;
-class BaseRecvTensorCall;
+class BaseRpcTensorCall;
 
 // RendezvousMgr keeps track of a set of local rendezvous instances.
 // All tensors sent by this worker are buffered in a RendezvousMgr
@@ -135,6 +135,16 @@ class BaseRemoteRendezvous : public RemoteRendezvous {
   void RecvAsync(const ParsedKey& key, const Rendezvous::Args& args,
                  DoneCallback done) override;
 
+  // (leo)
+  // This method is called only by the StSendOp (@worker).
+  // In the general (remote) case it initiates an RPC request. 
+  void StSendAsync(const ParsedKey& key, const Rendezvous::Args& args,
+                   const Tensor& val, DoneCallback done) override;
+
+  // may spinlock here to get strecv Tensor available.
+  void StRecvAsync(const ParsedKey& key, const Rendezvous::Args& args,
+                   DoneCallback done) override;
+
   void StartAbort(const Status& status) override;
 
   // This method is called only by the local Worker, forwarded through
@@ -154,16 +164,21 @@ class BaseRemoteRendezvous : public RemoteRendezvous {
                                    const Rendezvous::Args& args,
                                    DoneCallback done) = 0;
 
+  // Define in RpcRendezvous which will launch RpcSendTensorCall.
+  virtual void SendToRemoteAsync(const Rendezvous::ParsedKey& parsed,
+                                 const Rendezvous::Args& args,
+                                 const Tensor& val, DoneCallback done) = 0;
+
   // Returns true if "src" and "dst" are located in the same worker,
   // and hence may use a local rendezvous.
   virtual bool IsSameWorker(DeviceNameUtils::ParsedName src,
                             DeviceNameUtils::ParsedName dst);
 
   // If aborted, aborts "call". Otherwise, adds "call" into active_.
-  void RegisterCall(BaseRecvTensorCall* call);
+  void RegisterCall(BaseRpcTensorCall* call);
 
   // Removes "call" from active_ if "call" is in active_.
-  void DeregisterCall(BaseRecvTensorCall* call);
+  void DeregisterCall(BaseRpcTensorCall* call);
 
   WorkerSession* session();
 
@@ -193,7 +208,7 @@ class BaseRemoteRendezvous : public RemoteRendezvous {
   std::vector<DeferredCall> deferred_calls_ GUARDED_BY(mu_);
 
   // Active outstanding RecvTensor calls.
-  gtl::FlatSet<BaseRecvTensorCall*> active_ GUARDED_BY(mu_);
+  gtl::FlatSet<BaseRpcTensorCall*> active_ GUARDED_BY(mu_);
 
   bool is_initialized_locked() EXCLUSIVE_LOCKS_REQUIRED(mu_) {
     return session_ != nullptr;
@@ -219,19 +234,22 @@ class BaseRemoteRendezvous : public RemoteRendezvous {
   TF_DISALLOW_COPY_AND_ASSIGN(BaseRemoteRendezvous);
 };
 
-class BaseRecvTensorCall {
+// This class used to be BaseRecvTensorCall. In order to code reusability, 
+// we renamed it and will subclassed by RpcRecvTensorCall/RpcSendTensorCall.
+class BaseRpcTensorCall {
  public:
-  BaseRecvTensorCall() {}
-  virtual ~BaseRecvTensorCall() {}
+  BaseRpcTensorCall() {}
+  virtual ~BaseRpcTensorCall() {}
 
-  virtual void Start(std::function<void()> recv_done) = 0;
+  // done could be recv_done / send_done
+  virtual void Start(std::function<void()> done) = 0;
 
   virtual void StartAbort(const Status& s) = 0;
 
   virtual Status status() const = 0;
 
  private:
-  TF_DISALLOW_COPY_AND_ASSIGN(BaseRecvTensorCall);
+  TF_DISALLOW_COPY_AND_ASSIGN(BaseRpcTensorCall);
 };
 
 }  // end namespace tensorflow

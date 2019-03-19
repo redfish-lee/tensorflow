@@ -36,7 +36,7 @@ namespace tensorflow {
 
 namespace {
 
-class GdrRecvTensorCall : public BaseRecvTensorCall {
+class GdrRecvTensorCall : public BaseRpcTensorCall {
  public:
   GdrRecvTensorCall(WorkerInterface* wi, Device* dst_device,
                     RemoteMemoryManager* remote_memory_manager,
