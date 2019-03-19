@@ -169,11 +169,10 @@ Status GrpcServer::Init(
     return errors::Internal("Could not parse worker name.");
   }
 
-  LOG(INFO) << "GrpcServer/server_def_.cluster().DebugString(): \n" 
+  VLOG(1) << "GrpcServer/server_def_.cluster().DebugString(): \n" 
       << server_def_.cluster().DebugString();
 
-  LOG(INFO) << "GrpcServer/server_def_: \n" 
-      << server_def_.DebugString();
+  VLOG(1) << "GrpcServer/server_def_: \n" << server_def_.DebugString();
 
   // Look up the port that has been requested for this task in `server_def_`.
   int requested_port = -1;

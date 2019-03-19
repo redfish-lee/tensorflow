@@ -252,7 +252,8 @@ NodeDef* AddSend(const PartitionOptions& opts, const GraphInfo& g_info,
   } else {
     send_op = (host_memory) ? "_HostSend" : "_Send";
   }
-  LOG(INFO) << send_op;
+  
+ VLOG(0) << "AddSend: " << send_op << " with edge: " << edge->DebugString();
 
   NodeDefBuilder send_builder(opts.new_name(src->name()), send_op);
   SetSendRecvAttrs(opts, edge, &send_builder);
@@ -294,7 +295,7 @@ NodeDef* AddRecv(const PartitionOptions& opts, const GraphInfo& g_info,
   } else {
     recv_op = (host_memory) ? "_HostRecv" : "_Recv";
   }
-  LOG(INFO) << recv_op;
+  VLOG(0) << "AddRecv: " << recv_op << " with edge: " << edge->DebugString();
 
   NodeDefBuilder recv_builder(opts.new_name(src->name()), recv_op);
   SetSendRecvAttrs(opts, edge, &recv_builder);
@@ -948,7 +949,6 @@ void SetIncarnation(const PartitionOptions& opts, NodeDef* ndef) {
     return;
   }
   
-  LOG(INFO) << op;
   string send_device;
   if (!GetNodeAttr(*ndef, "send_device", &send_device).ok()) {
     // No known send_device. The runtime will detect it later.
