@@ -92,6 +92,16 @@ void WorkerCacheLogger::RecordRecvTensor(int64 step_id, int64 start_usecs,
                      dst_device, bytes, "", "RecvTensor");
 }
 
+void WorkerCacheLogger::RecordSendTensor(int64 step_id, int64 start_usecs,
+                                         int64 end_usecs,
+                                         const string& tensor_name,
+                                         const string& src_device,
+                                         const string& dst_device,
+                                         int64 bytes) {
+  RecordDataTransfer(step_id, start_usecs, end_usecs, tensor_name, src_device,
+                     dst_device, bytes, "", "SendTensor");
+}
+
 void WorkerCacheLogger::RecordDataTransfer(int64 step_id, int64 start_usecs,
                                            int64 end_usecs,
                                            const string& tensor_name,
