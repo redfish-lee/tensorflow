@@ -165,6 +165,9 @@ class GrpcWorkerService : public AsyncServiceInterface {
       for (int i = 0; i < 1000; ++i) {
         EnqueueRecvTensorRequestRaw();
       }
+      for (int i = 0; i < 1000; ++i) {
+        EnqueueSendTensorRequestRaw();
+      }
       for (int i = 0; i < 100; ++i) {
         ENQUEUE_REQUEST(RunGraph, true);
       }
@@ -297,6 +300,24 @@ class GrpcWorkerService : public AsyncServiceInterface {
       EnqueueRecvTensorRequestRaw();
     }
 
+    // Server-side handler for SendTensorRequest.
+    void SendTensorHandlerRaw(
+        WorkerCall<SendTensorRequest, ::grpc::ByteBuffer>* call) {
+      Schedule([this, call]() {
+        CallOptions* call_opts = new CallOptions;
+        call->SetCancelCallback([call_opts]() { call_opts->StartCancel(); });
+
+        // define in grpc_worker_service.h
+        worker_->GrpcSendTensorAsync(call_opts, &call->request, &call->response,
+                                     [call, call_opts](const Status& s) {
+                                       call->ClearCancelCallback();
+                                       delete call_opts;
+                                       call->SendResponse(ToGrpcStatus(s));
+                                     });
+      });
+      EnqueueSendTensorRequestRaw();
+    }
+
     void CleanupGraphHandler(
         WorkerCall<CleanupGraphRequest, CleanupGraphResponse>* call) {
       Schedule([this, call]() {
@@ -336,6 +357,19 @@ class GrpcWorkerService : public AsyncServiceInterface {
       }
     }
 
+    void EnqueueSendTensorRequestRaw() {
+      mutex_lock l(shutdown_mu_);
+      if (!is_shutdown_) {
+        Call<GrpcWorkerServiceThread, grpc::WorkerService::AsyncService,
+             SendTensorRequest, ::grpc::ByteBuffer>::
+            EnqueueRequestForMethod(
+                worker_service_, cq_.get(),
+                static_cast<int>(GrpcWorkerMethod::kSendTensor),
+                &GrpcWorkerServiceThread::SendTensorHandlerRaw,
+                true /* supports cancel*/);
+      }
+    }
+
     GrpcWorker* const worker_ = nullptr;  // Not owned.
     std::unique_ptr<::grpc::ServerCompletionQueue> cq_;
     std::unique_ptr<Thread> thread_;
@@ -358,7 +392,9 @@ class GrpcWorkerService : public AsyncServiceInterface {
 }  // namespace
 
 GrpcWorker::GrpcWorker(WorkerEnv* worker_env)
-    : Worker(worker_env), recv_tensor_recent_request_ids_(100000) {}
+    : Worker(worker_env),
+      recv_tensor_recent_request_ids_(100000),
+      send_tensor_recent_request_ids_(100000) {}
 
 // GrpcRecvTensorAsync: unlike the other Worker methods, which use protocol
 // buffers for a response object, to avoid extra protocol buffer serialization
@@ -444,6 +480,58 @@ void GrpcWorker::GrpcRecvTensorAsync(CallOptions* opts,
           //  !s.ok()
           done(status);
         }
+      });
+}
+
+// (leo)
+// GrpcSendTensorAsync
+// Parse request, write to local rendezvous
+// Return response with status only (no more Tensor).
+void GrpcWorker::GrpcSendTensorAsync(CallOptions* opts,
+                                     const SendTensorRequest* request,
+                                     ::grpc::ByteBuffer* response,
+                                     StatusCallback done) {
+  Status s = send_tensor_recent_request_ids_.TrackUnique(
+      request->request_id(), "SendTensor (GrpcWorker)", *request);
+  if (!s.ok()) {
+    done(s);
+    return;
+  }
+  const int64 step_id = request->step_id();
+  const string& key = request->rendezvous_key();
+  TRACEPRINTF("SendTensor: %lld %s", step_id, key.c_str());
+  Rendezvous::ParsedKey parsed;
+  s = Rendezvous::ParseKey(key, &parsed);
+
+  // This should live on PS (server-side)
+  Device* dst_dev = nullptr;
+  if (s.ok()) {
+    s = PrepareSendTensor(parsed, &dst_dev);
+  }
+  if (!s.ok()) {
+    done(s);
+    return;
+  }
+
+  Tensor val;
+  bool ok = val.FromProto(request->tensor());
+  if (!ok) {
+    VLOG(0) << "GrpcSendTensorAsync: Parsing Tensor from proto error.";
+    return;
+  }
+
+  // (RecvTensor) We used to wait local tensor async for send response back.
+  // (SendTensor) Now we write to rendezvous and go back directly.
+  opts->SetCancelCallback([this, step_id]() { AbortStep(step_id); });
+  env_->rendezvous_mgr->SendToLocalRendez(
+      step_id, parsed, val,
+      [opts, response, done, dst_dev](const Status& status,
+                                      const Rendezvous::Args& send_args,
+                                      const Rendezvous::Args& recv_args,
+                                      const Tensor& val, const bool is_dead) {
+        opts->ClearCancelCallback();
+        done(status);
+        VLOG(0) << "Callback of RendezMgr SendToLocalRendez";
       });
 }
 

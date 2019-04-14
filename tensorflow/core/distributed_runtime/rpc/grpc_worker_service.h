@@ -40,6 +40,12 @@ class GrpcWorker : public Worker {
                                    ::grpc::ByteBuffer* response,
                                    StatusCallback done);
 
+  // SendTensor for gRPC, need to avoids a copy ?
+  virtual void GrpcSendTensorAsync(CallOptions* opts,
+                                   const SendTensorRequest* request,
+                                   ::grpc::ByteBuffer* response,
+                                   StatusCallback done);
+
   virtual void LoggingAsync(const LoggingRequest* request,
                             LoggingResponse* response, StatusCallback done);
 
@@ -47,6 +53,7 @@ class GrpcWorker : public Worker {
 
  private:
   RecentRequestIds recv_tensor_recent_request_ids_;
+  RecentRequestIds send_tensor_recent_request_ids_;
 };
 
 std::unique_ptr<GrpcWorker> NewGrpcWorker(WorkerEnv* worker_env);
