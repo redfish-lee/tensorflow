@@ -45,7 +45,7 @@ GrpcSession::~GrpcSession() {}
 /* static */
 Status GrpcSession::Create(const SessionOptions& options,
                            std::unique_ptr<GrpcSession>* out_session) {
-  LOG(INFO) << "GrpcSession/Create/out_session";
+  VLOG(0) << "GrpcSession/Create/out_session";
   std::unique_ptr<GrpcSession> session(new GrpcSession(options));
   std::unique_ptr<MasterInterface> master;
   // For testing, we enable the client to disable the use of the local
@@ -270,6 +270,7 @@ Status GrpcSession::Run(const RunOptions& run_options,
                         const std::vector<string>& target_node_names,
                         std::vector<Tensor>* outputs,
                         RunMetadata* run_metadata) {
+  VLOG(0) << "GrpcSession::Run";
   return RunHelper(run_options, inputs, output_tensor_names, target_node_names,
                    outputs, run_metadata, /* prun_handle */ "");
 }

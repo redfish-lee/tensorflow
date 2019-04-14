@@ -250,7 +250,7 @@ Rendezvous::DoneCallback make_stsend_callback(OpKernelContext* ctx,
             bool is_dead) {
         ctx->SetStatus(s);
         if (s.ok()) {
-          LOG(INFO) << "StSendOp make_stsend_callback success";
+          VLOG(0) << "StSendOp make_stsend_callback success";
         }
         done();
       },

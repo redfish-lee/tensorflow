@@ -710,7 +710,7 @@ Status MasterSession::ReffedClientGraph::RunPartitions(
     PerStepState* pss, CallOptions* call_opts, const RunStepRequestWrapper& req,
     MutableRunStepResponseWrapper* resp, CancellationManager* cm,
     const bool is_last_partial_run) {
-  VLOG(2) << "RunPartitions step_id " << step_id << " execution_count "
+  VLOG(0) << "RunPartitions step_id " << step_id << " execution_count "
           << execution_count;
   // Maps the names of fed tensors to their index in `req`.
   std::unordered_map<StringPiece, size_t, StringPieceHasher> feeds(3);
@@ -734,7 +734,7 @@ Status MasterSession::ReffedClientGraph::RunPartitions(
     const MasterEnv* env, int64 step_id, int64 execution_count,
     PerStepState* pss, CallOptions* call_opts, const RunCallableRequest& req,
     RunCallableResponse* resp, CancellationManager* cm) {
-  VLOG(2) << "RunPartitions step_id " << step_id << " execution_count "
+  VLOG(0) << "RunPartitions step_id " << step_id << " execution_count "
           << execution_count;
   // Maps the names of fed tensors to their index in `req`.
   std::unordered_map<StringPiece, size_t, StringPieceHasher> feeds(3);
@@ -1496,6 +1496,7 @@ void MasterSession::MarkRunCompletion() {
 }
 
 Status MasterSession::BuildAndRegisterPartitions(ReffedClientGraph* rcg) {
+  VLOG(0) << "MasterSession::BuildAndRegisterPartitions"; 
   // Registers subgraphs if haven't done so.
   PartitionOptions popts;
   popts.node_to_loc = SplitByWorker;
@@ -1534,7 +1535,9 @@ Status MasterSession::BuildAndRegisterPartitions(ReffedClientGraph* rcg) {
     popts.need_to_record_start_times = true;
   }
 
+  VLOG(0) << "Before rcg->RegisterPartitions";
   TF_RETURN_IF_ERROR(rcg->RegisterPartitions(popts));
+  VLOG(0) << "After rcg->RegisterPartitions, finished.";
 
   return Status::OK();
 }
@@ -1795,8 +1798,10 @@ Status MasterSession::DoRunWithLocalExecution(
   std::unique_ptr<ProfileHandler> ph;
   FillPerStepState(rcg, req.options(), step_id, count, &pss, &ph);
 
+  VLOG(0) << "[DoRunWithLocalExecution] before rcg->RunPartitions";
   Status s = rcg->RunPartitions(env_, step_id, count, &pss, opts, req, resp,
                                 &cancellation_manager_, false);
+  VLOG(0) << "[DoRunWithLocalExecution] after rcg->RunPartitions, finished.";
   cleanup.release();  // MarkRunCompletion called in PostRunCleanup().
   return PostRunCleanup(rcg, step_id, req.options(), &pss, ph, s,
                         resp->mutable_metadata());
