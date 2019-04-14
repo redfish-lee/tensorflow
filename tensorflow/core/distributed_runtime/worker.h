@@ -99,6 +99,10 @@ class Worker : public WorkerInterface {
   Status PrepareRecvTensor(const Rendezvous::ParsedKey& parsed,
                            Device** src_dev);
 
+  // Used by GrpcSendTensorAsync prerequisite.
+  Status PrepareSendTensor(const Rendezvous::ParsedKey& parsed,
+                           Device** dst_dev);
+
   void AbortStep(int64);
 
  private:

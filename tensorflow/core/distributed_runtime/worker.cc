@@ -328,6 +328,18 @@ Status Worker::PrepareRecvTensor(const Rendezvous::ParsedKey& parsed,
   return Status::OK();
 }
 
+// Helper for SendTensor. Validates "key" and returns the destination device 
+// in "*dst_dev". Because dst is where sendTensor service's target device.
+Status Worker::PrepareSendTensor(const Rendezvous::ParsedKey& parsed,
+                                 Device** dst_dev) {
+  // Figures out which device the tensor is going to write on.
+  string local_name = DeviceNameUtils::LocalName(parsed.dst_device);
+  TF_RETURN_IF_ERROR(env_->device_mgr->LookupDevice(local_name, dst_dev));
+
+  VLOG(0) << "Skip src_incarnation check in PrepareSendTensor.";
+  return Status::OK();
+}
+
 void Worker::RecvTensorAsync(CallOptions* opts,
                              const RecvTensorRequest* request,
                              TensorResponse* response, StatusCallback done) {
