@@ -40,13 +40,19 @@ namespace {
 class RpcRemoteRendezvous : public BaseRemoteRendezvous {
  public:
   RpcRemoteRendezvous(const WorkerEnv* env, int64 step_id)
-      : BaseRemoteRendezvous(env, step_id) {}
+      : BaseRemoteRendezvous(env, step_id) {
+          VLOG(0) << "RpcRemoteRendezvous step: " << step_id;
+  }
 
  protected:
   void RecvFromRemoteAsync(const Rendezvous::ParsedKey& parsed,
                            const Rendezvous::Args& args,
                            DoneCallback done) override;
 
+  // Launch RpcSendTensorCall later
+  void SendToRemoteAsync(const Rendezvous::ParsedKey& parsed,
+                         const Rendezvous::Args& args,
+                         const Tensor& val, DoneCallback done) override;
  private:
   ~RpcRemoteRendezvous() override {}
 
@@ -54,7 +60,7 @@ class RpcRemoteRendezvous : public BaseRemoteRendezvous {
 };
 
 // Used only to retrieve tensors from remote processes.
-class RpcRecvTensorCall : public BaseRecvTensorCall {
+class RpcRecvTensorCall : public BaseRpcTensorCall {
  public:
   RpcRecvTensorCall() : wi_(nullptr), dst_device_(nullptr) {}
 
@@ -142,8 +148,8 @@ class RpcRecvTensorCall : public BaseRecvTensorCall {
     wi_->RecvTensorAsync(&opts_, &req_, &resp_, std::move(cb));
   }
 
-  string src_worker_;
-  string src_rel_device_;
+  string src_worker_;     /* task */
+  string src_rel_device_; /* device */
   WorkerInterface* wi_;
   AllocatorAttributes alloc_attrs_;
   Device* dst_device_;
@@ -260,6 +266,230 @@ void RpcRemoteRendezvous::RecvFromRemoteAsync(
   });
 }
 
+// (leo)
+// Used only to transfer tensors to remote processes.
+// StSend is (src) and StRecv is (dst), which is same as original.
+// The main difference is that:
+// - Old Recv wrap RpcRecvTensorCall
+// - New StSend wrap RpcSendTensorCall
+class RpcSendTensorCall : public BaseRpcTensorCall {
+ public:
+  RpcSendTensorCall() : wi_(nullptr), src_device_(nullptr) {}
+
+  void Init(WorkerInterface* wi, int64 step_id, StringPiece key,
+            AllocatorAttributes alloc_attrs, Device* src_device,
+            const Rendezvous::Args& send_args, const Tensor& val,
+            Rendezvous::DoneCallback done) {
+    wi_ = wi;
+    alloc_attrs_ = alloc_attrs;
+    src_device_ = src_device;
+    send_args_ = send_args;
+    done_ = std::move(done);
+    req_.set_step_id(step_id);
+    req_.set_rendezvous_key(key.data(), key.size());
+    req_.set_request_id(GetUniqueRequestId());
+
+    // Transfer Tensor to TensorProto inside SendTensorReq
+    tensor_ = val;
+    val.AsProtoField(req_.mutable_tensor());
+  }
+
+  void Reset(WorkerCacheInterface* wc) {
+    wc->ReleaseWorker(dst_worker_, wi_);
+    wi_ = nullptr;
+    alloc_attrs_ = AllocatorAttributes();
+    src_device_ = nullptr;
+    // We don't clear opts_ and assume that Init will set up the state for
+    // opts_ appropriately.
+    req_.Clear();
+    resp_.Clear();
+    {
+      mutex_lock l(mu_);
+      status_ = Status::OK();
+    }
+    done_ = nullptr;
+  }
+
+  ~RpcSendTensorCall() override {
+    // Since only the RpcRecvTensorFreeList will delete an
+    // RpcRecvTensorCall, and it always sets this->wi_ to null when
+    // a call object is released to it, we can assert that this->wi_ is
+    // always null at the point of deletion.
+    CHECK_EQ(static_cast<WorkerInterface*>(nullptr), wi_)
+        << "Leaking WorkerInterface in RpcSendTensorCall destructor.";
+  }
+
+  void Start(std::function<void()> send_done) override {
+    StartSTCall(std::move(send_done));
+  }
+
+  void StartAbort(const Status& s) override {
+    {
+      mutex_lock l(mu_);
+      status_.Update(s);
+    }
+    opts_.StartCancel();
+  }
+
+  Status status() const override {
+    mutex_lock l(mu_);
+    return status_;
+  }
+
+  // Tensor is one of the data to be sent by this call.
+  const Tensor& tensor() const { return tensor_; }
+
+  bool is_dead() const { return resp_.metadata().is_dead(); }
+
+  Device* src_device() const { return src_device_; }
+  const Rendezvous::Args& send_args() const { return send_args_; }
+  const Rendezvous::DoneCallback& done() const { return done_; }
+
+ private:
+  friend class RpcRemoteRendezvous;
+
+  // Start the main SendTensor call, checking for an async abort.
+  void StartSTCall(std::function<void()> send_done) {
+    resp_.InitAlloc(src_device_, alloc_attrs_);
+    using namespace std::placeholders;
+    StatusCallback cb = std::bind(
+        [this](std::function<void()> send_done,
+               // Begin unbound arguments.
+               const Status& s) {
+          if (!s.ok()) {
+            mutex_lock l(mu_);
+            status_.Update(s);
+          }
+          send_done();
+        },
+        std::move(send_done), _1);
+
+    // grpc remote worker
+    wi_->SendTensorAsync(&opts_, &req_, &resp_, std::move(cb));
+  }
+
+  string dst_worker_;     /* task, job:worker/replica:0/task:0 */
+  string dst_rel_device_; /* device, CPU:0 */
+  WorkerInterface* wi_;
+  AllocatorAttributes alloc_attrs_;
+  Device* src_device_;    /* where StSend lives on */
+  CallOptions opts_;
+  SendTensorRequest req_; /* proto */
+  TensorResponse resp_;
+  Rendezvous::Args send_args_;
+  Rendezvous::DoneCallback done_;
+
+  Tensor tensor_;
+
+  mutable mutex mu_;
+  Status status_ GUARDED_BY(mu_);
+
+  TF_DISALLOW_COPY_AND_ASSIGN(RpcSendTensorCall);
+};
+
+class RpcSendTensorFreeList {
+ public:
+  RpcSendTensorFreeList() {}
+  ~RpcSendTensorFreeList() {
+    for (size_t i = 0; i < objects_.size(); i++) {
+      delete objects_[i];
+    }
+  }
+
+  RpcSendTensorCall* New() {
+    {
+      mutex_lock l(mu_);
+      if (!objects_.empty()) {
+        RpcSendTensorCall* result = objects_.back();
+        objects_.pop_back();
+        return result;
+      }
+    }
+    return new RpcSendTensorCall;
+  }
+
+  void Release(RpcSendTensorCall* obj, WorkerCacheInterface* wc) {
+    obj->Reset(wc);
+    {
+      mutex_lock l(mu_);
+      if (objects_.size() < kMaxObjects) {
+        objects_.push_back(obj);
+        return;
+      }
+    }
+    delete obj;
+  }
+
+ private:
+  static const int kMaxObjects = 1000;
+
+  mutex mu_;
+  std::vector<RpcSendTensorCall*> objects_ GUARDED_BY(mu_);
+};
+
+static RpcSendTensorFreeList* get_st_call_freelist() {
+  static RpcSendTensorFreeList* st_call_freelist = new RpcSendTensorFreeList();
+  return st_call_freelist;
+}
+
+// Call by worker, send Tensor to remote (ps)
+void RpcRemoteRendezvous::SendToRemoteAsync(const Rendezvous::ParsedKey& parsed,
+                                            const Rendezvous::Args& send_args,
+                                            const Tensor& val,
+                                            DoneCallback done) {
+  VLOG(0) << "RpcRemoteRendez::SendToRemoteAsync " << parsed.FullKey();
+  CHECK(is_initialized());
+  Status s;
+
+  // Prepare a SendTensor call that can handle being aborted.
+  RpcSendTensorCall* call = get_st_call_freelist()->New();
+
+  // key.dst_device identifies a remote device (which StRecv lives on).
+  if (!DeviceNameUtils::SplitDeviceName(parsed.dst_device, &call->dst_worker_,
+                                        &call->dst_rel_device_)) {
+    s = errors::Internal(parsed.dst_device,
+                         " is invalid remote source device.");
+  }
+  WorkerSession* sess = session();
+  WorkerInterface* rwi = sess->worker_cache->CreateWorker(call->dst_worker_);
+  if (s.ok() && rwi == nullptr) {
+    s = errors::Internal("No worker known as ", call->dst_worker_);
+  }
+
+  Device* src_device;
+  if (s.ok()) {
+    s = sess->device_mgr->LookupDevice(parsed.src_device, &src_device);
+  }
+  if (!s.ok()) {
+    if (rwi != nullptr) {
+      sess->worker_cache->ReleaseWorker(call->dst_worker_, rwi);
+    }
+    get_st_call_freelist()->Release(call, sess->worker_cache.get());
+    done(s, send_args, Args(), Tensor{}, false);
+    return;
+  }
+
+  call->Init(rwi, step_id_, parsed.FullKey(), send_args.alloc_attrs, src_device,
+             send_args, val, std::move(done));
+
+  // Record "call" in active_ so that it can be aborted cleanly.
+  RegisterCall(call);
+
+  // Start "call".
+  Ref();
+  call->Start([this, call]() {
+    // Removes "call" from active_. Prevent StartAbort().
+    DeregisterCall(call);
+    // If StartAbort was called prior to DeregisterCall, then the
+    // current status should be bad.
+    Status s = call->status();
+    call->done()(s, call->send_args(), Args(),call->tensor(), call->is_dead());
+    session()->worker_cache->ReleaseWorker(call->dst_worker_, call->wi_);
+    call->wi_ = nullptr;
+    get_st_call_freelist()->Release(call, session()->worker_cache.get());
+    Unref();
+  });
+}
 }  // namespace
 
 RpcRendezvousMgr::RpcRendezvousMgr(const WorkerEnv* env)
