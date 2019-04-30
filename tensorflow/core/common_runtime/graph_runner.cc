@@ -90,6 +90,11 @@ class SimpleRendezvous : public Rendezvous {
     LOG(INFO) << "SimpleRendezvous::StRecvAsync";
   }
 
+  Status WriteToRendez(const ParsedKey& key, const Args& send_args,
+                       const Tensor& val, DoneCallback done) override {
+    LOG(INFO) << "SimpleRendezvous::WriteToRendez";
+  };
+
   void StartAbort(const Status& status) override {}
 
  private:

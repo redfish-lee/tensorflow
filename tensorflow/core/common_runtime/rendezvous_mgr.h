@@ -53,7 +53,6 @@ class IntraProcessRendezvous : public Rendezvous {
   void RecvAsync(const ParsedKey& key, const Rendezvous::Args& args,
                  DoneCallback done) override;
 
-
   // Can be removed until pure virtual function of Rendezvous disabled.
   void StSendAsync(const ParsedKey& key, const Args& args,
                    const Tensor& val, DoneCallback done) override {
@@ -63,6 +62,13 @@ class IntraProcessRendezvous : public Rendezvous {
   void StRecvAsync(const ParsedKey& key, const Args& args,
                            DoneCallback done) override {
     LOG(INFO) << "[SUPPOSED_NOT_REACHED] IntraProcessRendezvous::StRecvAsync";
+  }
+
+  // Called by SendTensor Server-side for write Tensor to rendez.
+  Status WriteToRendez(const ParsedKey& key, const Args& send_args,
+                       const Tensor& val, DoneCallback done) override {
+    LOG(INFO) << "[SUPPOSED_NOT_REACHED] IntraProcessRendezvous::WriteToRendez";
+    return Status::OK();
   }
 
   void StartAbort(const Status& status) override;
