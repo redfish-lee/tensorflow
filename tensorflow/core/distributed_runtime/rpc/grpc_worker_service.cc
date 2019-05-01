@@ -57,7 +57,7 @@ class GrpcWorkerService : public AsyncServiceInterface {
  public:
   GrpcWorkerService(GrpcWorker* worker, ::grpc::ServerBuilder* builder)
       : is_shutdown_(false) {
-    LOG(INFO) << "GrpcWorkerService/ctor";
+    VLOG(1) << "GrpcWorkerService/ctor";
     builder->RegisterService(&worker_service_);
     for (int i = 0; i < kGrpcWorkerServiceThreadCount; i++) {
       threads_.emplace_back(
@@ -70,7 +70,7 @@ class GrpcWorkerService : public AsyncServiceInterface {
     {
       mutex_lock l(service_shutdown_mu_);
       if (!is_shutdown_) {
-        LOG(INFO) << "Shutting down GrpcWorkerService.";
+        VLOG(1) << "Shutting down GrpcWorkerService.";
         is_shutdown_ = true;
         did_shutdown = true;
       }
@@ -149,7 +149,7 @@ class GrpcWorkerService : public AsyncServiceInterface {
 
    private:
     void HandleRPCsLoop() {
-      // LOG(INFO) << "GrpcWorkerService/HandleRPCsLoop";
+      // VLOG(1) << "GrpcWorkerService/HandleRPCsLoop";
       // TODO(ncteisen): This may require performance engineering. We can
       // change the number of threads, the number of handlers per thread,
       // or even decide to specialize certain threads to certain methods.
@@ -302,7 +302,7 @@ class GrpcWorkerService : public AsyncServiceInterface {
 
     // Server-side handler for SendTensorRequest.
     void SendTensorHandlerRaw(
-        WorkerCall<SendTensorRequest, ::grpc::ByteBuffer>* call) {
+        WorkerCall<SendTensorRequest, SendTensorResponse>* call) {
       Schedule([this, call]() {
         CallOptions* call_opts = new CallOptions;
         call->SetCancelCallback([call_opts]() { call_opts->StartCancel(); });
@@ -310,6 +310,7 @@ class GrpcWorkerService : public AsyncServiceInterface {
         // define in grpc_worker_service.h
         worker_->GrpcSendTensorAsync(call_opts, &call->request, &call->response,
                                      [call, call_opts](const Status& s) {
+                                       VLOG(0) << "Handler Sending Response.";
                                        call->ClearCancelCallback();
                                        delete call_opts;
                                        call->SendResponse(ToGrpcStatus(s));
@@ -361,7 +362,7 @@ class GrpcWorkerService : public AsyncServiceInterface {
       mutex_lock l(shutdown_mu_);
       if (!is_shutdown_) {
         Call<GrpcWorkerServiceThread, grpc::WorkerService::AsyncService,
-             SendTensorRequest, ::grpc::ByteBuffer>::
+             SendTensorRequest, SendTensorResponse>::
             EnqueueRequestForMethod(
                 worker_service_, cq_.get(),
                 static_cast<int>(GrpcWorkerMethod::kSendTensor),
@@ -484,12 +485,12 @@ void GrpcWorker::GrpcRecvTensorAsync(CallOptions* opts,
 }
 
 // (leo)
-// GrpcSendTensorAsync
+// GrpcSendTensor (sync, write and return response)
 // Parse request, write to local rendezvous
 // Return response with status only (no more Tensor).
 void GrpcWorker::GrpcSendTensorAsync(CallOptions* opts,
                                      const SendTensorRequest* request,
-                                     ::grpc::ByteBuffer* response,
+                                     SendTensorResponse* response,
                                      StatusCallback done) {
   Status s = send_tensor_recent_request_ids_.TrackUnique(
       request->request_id(), "SendTensor (GrpcWorker)", *request);

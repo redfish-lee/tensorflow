@@ -43,7 +43,7 @@ class GrpcWorker : public Worker {
   // SendTensor for gRPC, need to avoids a copy ?
   virtual void GrpcSendTensorAsync(CallOptions* opts,
                                    const SendTensorRequest* request,
-                                   ::grpc::ByteBuffer* response,
+                                   SendTensorResponse* response,
                                    StatusCallback done);
 
   virtual void LoggingAsync(const LoggingRequest* request,
