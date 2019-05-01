@@ -112,7 +112,7 @@ class Rendezvous : public core::RefCounted {
 
   // New Rendezvous virtual method for StSendOp/StRecvOp,
   // which might define in BaseRemoteRendezvous
-  virtual void StSendAsync(const ParsedKey& key, const Args& args, 
+  virtual void StSendAsync(const ParsedKey& key, const Args& args,
                            const Tensor& val, DoneCallback done) = 0;
 
   virtual void StRecvAsync(const ParsedKey& key, const Args& args,
@@ -123,6 +123,10 @@ class Rendezvous : public core::RefCounted {
               bool* is_dead, int64 timeout_ms);
   Status Recv(const ParsedKey& key, const Args& args, Tensor* val,
               bool* is_dead);
+
+  // Called by SendTensor Server-side for write Tensor to rendez.
+  virtual Status WriteToRendez(const ParsedKey& key, const Args& send_args,
+                               const Tensor& val, DoneCallback done) = 0;
 
   // Aborts all pending and future Send/Recv with the given "status".
   //

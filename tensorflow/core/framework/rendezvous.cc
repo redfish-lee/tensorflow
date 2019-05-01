@@ -246,6 +246,15 @@ class LocalRendezvousImpl : public Rendezvous {
     delete item;
   }
 
+  // This method is called by BaseRemoteRendezvous::SendToLocal
+  // Similar to `Send` method.
+  // (Update) Prefer to use Send directly.
+  Status WriteToRendez(const ParsedKey& key, const Args& send_args, 
+                       const Tensor& val, DoneCallback done) override {
+    VLOG(0) << "[SUPPOSE_NOT_REACHED] LocalRendezvousImpl::WriteToRendez";
+    return Status::OK();
+  }
+
   void StartAbort(const Status& status) override {
     CHECK(!status.ok());
     Table table;
