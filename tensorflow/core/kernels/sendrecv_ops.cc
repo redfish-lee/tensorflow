@@ -344,6 +344,7 @@ Rendezvous::DoneCallback make_strecv_callback(OpKernelContext* ctx,
             bool is_dead) {
         ctx->SetStatus(s);
         if (s.ok()) {
+          VLOG(1) << "StRecvOp Callback, feed tensor to output: " << val.DebugString();
           if (!is_dead) {
             ctx->set_output(0, val);
           }
