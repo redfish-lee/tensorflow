@@ -57,11 +57,7 @@ class GrpcRemoteWorker : public WorkerInterface {
         sendtensor_(Method(GrpcWorkerMethod::kSendTensor)),
         logging_(Method(GrpcWorkerMethod::kLogging)),
         tracing_(Method(GrpcWorkerMethod::kTracing)),
-        logger_(logger) {
-        
-        
-      // LOG(INFO) << "GrpcRemoteWorker/ctor";
-    }
+        logger_(logger) {}
 
   ~GrpcRemoteWorker() override {}
 
@@ -120,8 +116,7 @@ class GrpcRemoteWorker : public WorkerInterface {
 
   void RecvTensorAsync(CallOptions* call_opts, const RecvTensorRequest* request,
                        TensorResponse* response, StatusCallback done) override {
-    VLOG(1) << "RecvTensorAsync req: " << request->DebugString();
-    LOG(INFO) << "RecvTensorAsync req: " << request->DebugString();
+    VLOG(0) << "RecvTensorAsync req: " << request->DebugString();
     int64 start_usec = Env::Default()->NowMicros();
     // Type-specialized logging for this method.
     bool logging_active = logger_->LoggingActive() || VLOG_IS_ON(2);
@@ -167,14 +162,12 @@ class GrpcRemoteWorker : public WorkerInterface {
                                       bytes);
           }
         }
-        VLOG(2) << "done callback, req: " << request->DebugString()
+        VLOG(0) << "done callback, req: " << request->DebugString()
                 << " response " << response->metadata().DebugString();
 
         done(s);
       };
-    
-      LOG(INFO) << "done callback, req: " << request->DebugString()
-                << " response " << response->metadata().DebugString();
+
       cb_to_use = &wrapper_done;
     }
 
@@ -183,7 +176,49 @@ class GrpcRemoteWorker : public WorkerInterface {
 
   void SendTensorAsync(CallOptions* call_opts, const SendTensorRequest* request,
                        TensorResponse* response, StatusCallback done) override {
-    VLOG(0) << "SendTensorAsync req: " << request->DebugString();
+    VLOG(1) << "GrpcWorker: SendTensorAsync req: " << request->DebugString();
+    int64 start_usec = Env::Default()->NowMicros();
+    // Type-specialized logging for this method.
+    bool logging_active = logger_->LoggingActive() || VLOG_IS_ON(2);
+    StatusCallback wrapper_done;
+    const StatusCallback* cb_to_use;
+    if (!logging_active) {
+      cb_to_use = &done;  // No additional work to do, so just use done directly
+    } else {
+      wrapper_done = [this, request, response, done, start_usec](Status s) {
+        if (logger_->LoggingActive()) {
+          int64 end_usec = Env::Default()->NowMicros();
+          int64 step_id = request->step_id();
+          int64 bytes = 0;
+          Tensor t;
+          if (t.FromProto(request->tensor())) {
+            bytes = t.TotalBytes();
+          } else {
+            VLOG(0) << "[error] SendTensorRequest tensor total bytes: " 
+                    << t.TotalBytes();
+          }
+          int64 send_start_usec = start_usec;
+          const string& key = request->rendezvous_key();
+          std::vector<string> key_parts = str_util::Split(key, ';');
+          if (key_parts.size() != 5) {
+            LOG(WARNING) << "Bad key: " << key;
+          } else {
+            logger_->RecordSendTensor(step_id, send_start_usec, end_usec,
+                                      key_parts[3],  // tensor name
+                                      key_parts[0],  // src_device
+                                      key_parts[2],  // dst_device
+                                      bytes);
+          }
+        }
+        VLOG(0) << "done callback, req: " << request->DebugString()
+                << " response " << response->metadata().DebugString();
+        done(s);
+      };
+
+      cb_to_use = &wrapper_done;
+    }
+
+    IssueRequest(request, response, sendtensor_, *cb_to_use, call_opts);
   }
 
   void LoggingAsync(const LoggingRequest* request, LoggingResponse* response,
