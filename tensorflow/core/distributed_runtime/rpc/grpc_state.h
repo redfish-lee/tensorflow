@@ -61,6 +61,8 @@ class RPCState : public GrpcClientCQTag {
         std::move(stub->PrepareUnaryCall(&context_, method, request_buf_, cq));
     call_->StartCall();
     call_->Finish(&response_buf_, &status_, this);
+    method_ = &method;
+    VLOG(0) << "ResponseReader Finish with method: " << *(this->method_);
   }
 
   void OnCompleted(bool ok) override {
@@ -79,6 +81,7 @@ class RPCState : public GrpcClientCQTag {
     if (!s.ok()) {
       VLOG(2) << "Call returned with non-ok status: " << s;
     }
+    VLOG(0) << "RPCState OnCompleted called with method: " << *(this->method_);
     done_(s);
     delete this;
   }
@@ -91,6 +94,7 @@ class RPCState : public GrpcClientCQTag {
   ::grpc::ByteBuffer request_buf_;
   ::grpc::ByteBuffer response_buf_;
   ::grpc::Status status_;
+  const ::grpc::string* method_;
   StatusCallback done_;
 };
 
