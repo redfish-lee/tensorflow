@@ -85,6 +85,13 @@ class RendezvousMgrInterface {
   virtual Status RecvLocal(int64 step_id, const Rendezvous::ParsedKey& parsed,
                            Tensor* val, bool* is_dead) = 0;
 
+  // "done" when the tensor for "key" is write to its local rendezvous.
+  // This method is used by the rpc handler of SendTensor.
+  virtual void SendToLocalRendez(int64 step_id,
+                                 const Rendezvous::ParsedKey& parsed,
+                                 const Tensor&,
+                                 Rendezvous::DoneCallback done) = 0;
+
   // Removes rendezvous for "step_id".
   //
   // TODO(zhifengc): Have a background thread in worker that
