@@ -82,6 +82,12 @@ class BaseRendezvousMgr : public RendezvousMgrInterface {
   Status RecvLocal(int64 step_id, const Rendezvous::ParsedKey& parsed,
                    Tensor* val, bool* is_dead) override;
 
+  // Finds the local rendezvous instance for the "step_id".  Runs
+  // "done" when the tensor for "key" is write to its local rendezvous.
+  // This method is used by the rpc handler of SendTensor.
+  void SendToLocalRendez(int64 step_id, const Rendezvous::ParsedKey& parsed,
+                        const Tensor&, Rendezvous::DoneCallback done) override;
+
   // Removes rendezvous for "step_id".
   //
   // TODO(zhifengc): Have a background thread in worker that
@@ -135,15 +141,21 @@ class BaseRemoteRendezvous : public RemoteRendezvous {
   void RecvAsync(const ParsedKey& key, const Rendezvous::Args& args,
                  DoneCallback done) override;
 
-  // (leo)
-  // This method is called only by the StSendOp (@worker).
-  // In the general (remote) case it initiates an RPC request. 
+  // This method is called only by the StSendOp (@worker) which is client-side.
+  // In the general (remote) case it initiates an RPC request.
   void StSendAsync(const ParsedKey& key, const Rendezvous::Args& args,
                    const Tensor& val, DoneCallback done) override;
 
-  // may spinlock here to get strecv Tensor available.
+  // This method is called only by the StRecvOp (@ps) which is server-side.
+  // We use spinlock here to check StSend already write Tensor to rendez.
   void StRecvAsync(const ParsedKey& key, const Rendezvous::Args& args,
                    DoneCallback done) override;
+
+  Status WriteToRendez(const ParsedKey& key, const Args& send_args,
+                       const Tensor& val, DoneCallback done) override {
+    VLOG(0) << "[SUPPOSED NOT REACHED] BaseRemoteRendezvous::WriteToRendez";
+    return Status::OK();
+  }
 
   void StartAbort(const Status& status) override;
 
@@ -158,6 +170,11 @@ class BaseRemoteRendezvous : public RemoteRendezvous {
   //
   // REQUIRES: "parsed" is one that will be Saved into the local rendezvous.
   void RecvLocalAsync(const ParsedKey& parsed, DoneCallback done);
+
+  // This method is called by local Worker, RendezvousMgr find rendez and call
+  // this method. Eliminate DoneCallback when cleanup to pure sync method.
+  void SendToLocal(const ParsedKey& parsed, const Tensor& val,
+                   DoneCallback done);
 
  protected:
   virtual void RecvFromRemoteAsync(const Rendezvous::ParsedKey& parsed,

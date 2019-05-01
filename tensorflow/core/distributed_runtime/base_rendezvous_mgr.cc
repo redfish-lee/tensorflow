@@ -101,6 +101,30 @@ Status BaseRendezvousMgr::RecvLocal(int64 step_id,
   return ret;
 }
 
+// Finds the local rendezvous instance for the "step_id" and write the tensor
+// to its local rendezvous. Impl this method using sync, because
+// SendTensor Service doesn't need to wait for Tensor available.
+void BaseRendezvousMgr::SendToLocalRendez(int64 step_id,
+                                          const Rendezvous::ParsedKey& parsed,
+                                          const Tensor& t,
+                                          Rendezvous::DoneCallback done) {
+  auto rendez = FindOrCreate(step_id);
+  using namespace std::placeholders;
+  VLOG(0) << "Server-side RendezMgr::SendToLocal";
+  // Rendezvous::DoneCallback done_cb = std::bind()
+
+  Rendezvous::DoneCallback done_cb = std::bind(
+      [rendez](Rendezvous::DoneCallback done,
+               // Begin unbound arguments.
+               const Status& s, const Rendezvous::Args& send_args,
+               const Rendezvous::Args& recv_args, const Tensor& t, bool dead) {
+        rendez->Unref();
+        done(s, send_args, recv_args, t, dead);
+      },
+      std::move(done), _1, _2, _3, _4, _5);
+  rendez->SendToLocal(parsed, t, std::move(done_cb));
+}
+
 void BaseRendezvousMgr::Cleanup(int64 step_id) {
   Rendezvous* rendez = nullptr;
   {
@@ -328,6 +352,61 @@ void BaseRemoteRendezvous::RecvAsync(const ParsedKey& parsed,
   }
 }
 
+// This method is called only by the StSendOp (@worker).
+// In the general (remote) case it initiates an RPC request.
+void BaseRemoteRendezvous::StSendAsync(const Rendezvous::ParsedKey& parsed,
+                                       const Rendezvous::Args& args,
+                                       const Tensor& val,
+                                       DoneCallback done) {
+  VLOG(0) << "RemoteRendez StSendAsync " << this << " " << parsed.FullKey();
+  VLOG(0) << "Tensor: " << val.DebugString();
+  {
+    mutex_lock l(mu_);
+    if (!status_.ok()) {
+      VLOG(0) << "status: " << status_;
+      return;
+    }
+    DCHECK(is_initialized_locked());
+    if (!IsLocalDevice(session_->worker_name, parsed.src_device)) {
+      VLOG(0) << "Invalid rendezvous key (src): " << parsed.FullKey()
+              << " @ " << session_->worker_name;
+      return;
+    }
+  }
+
+  Status s = ValidateDevices(parsed, true /* is_src */);
+  if (!s.ok()) {
+    VLOG(0) << "StSendAsync devices invalid.";
+    return;
+  }
+
+  // src and dst should not in the same worker due to partition policy.
+  if (IsSameWorker(parsed.src, parsed.dst)) {
+    VLOG(0) << "[SUPPOSED_NOT_REACHED] StSendAsync call local_ (src/dst IsSameWorker)";
+    // is_dead set to true (temporary)
+    local_->Send(parsed, args, val, true);
+    return;
+  } else {
+    SendToRemoteAsync(parsed, args, val, std::move(done));
+  }
+}
+
+// may spinlock hoere to get strecv Tensor available.
+// Or this is just like foward to local_ 's RecvAsync.
+void BaseRemoteRendezvous::StRecvAsync(const Rendezvous::ParsedKey& parsed,
+                                       const Rendezvous::Args& args,
+                                       DoneCallback done) {
+  VLOG(0) << "RemoteRendez StRecvAsync " << this << " " << parsed.FullKey();
+
+  // here we want to spinlock(polling)
+  // to get Tensor and write to local_ rendezvous
+  // So, here we might call local.
+
+  // Maybe call localRecv first.
+  VLOG(0) << "Foward to LocalRecv" << this << " " << parsed.FullKey();
+  local_->RecvAsync(parsed, Args(), std::move(done));
+}
+
 void BaseRemoteRendezvous::RecvLocalAsync(const ParsedKey& parsed,
                                           DoneCallback done) {
   {
@@ -358,6 +437,29 @@ void BaseRemoteRendezvous::RecvLocalAsyncInternal(const ParsedKey& parsed,
   local_->RecvAsync(parsed, Args(), std::move(done));
 }
 
+// This method is called by local Worker, RendezvousMgr find rendez and call
+// this method. Eliminate DoneCallback when cleanup to pure sync method.
+void BaseRemoteRendezvous::SendToLocal(const ParsedKey& parsed,
+                                       const Tensor& val, DoneCallback done) {
+
+  VLOG(0) << "Server-side RemoteRendezvous::SendToLocal (foward to local)";
+  VLOG(0) << "Tensor val: " << val.DebugString();
+
+  // No need to do initialize check due to Tensor is already available.
+  // SendToLocalInternal. If "is_src" is false, checks that
+  // the rendezvous key "parsed"'s destination is in this process.
+  Status s = ValidateDevices(parsed, false /* is_src */);
+  if (!s.ok()) {
+    done(s, Args(), Args(), Tensor(), false);
+    return;
+  }
+
+  // Local Send has no callback.
+  // write tensor to local rendezvous.
+  local_->Send(parsed, Args(), val, false);
+  done(s, Args(), Args(), val, false);
+}
+
 void BaseRemoteRendezvous::StartAbort(const Status& s) {
   CHECK(!s.ok());
   local_->StartAbort(s);
@@ -366,7 +468,7 @@ void BaseRemoteRendezvous::StartAbort(const Status& s) {
     mutex_lock l(mu_);
     if (status_.ok()) {
       status_ = s;
-      for (BaseRecvTensorCall* call : active_) {
+      for (BaseRpcTensorCall* call : active_) {
         call->StartAbort(s);
       }
       active_.clear();
@@ -374,7 +476,7 @@ void BaseRemoteRendezvous::StartAbort(const Status& s) {
   }
 }
 
-void BaseRemoteRendezvous::RegisterCall(BaseRecvTensorCall* call) {
+void BaseRemoteRendezvous::RegisterCall(BaseRpcTensorCall* call) {
   mutex_lock l(mu_);
   if (!status_.ok()) {
     call->StartAbort(status_);
@@ -383,7 +485,7 @@ void BaseRemoteRendezvous::RegisterCall(BaseRecvTensorCall* call) {
   }
 }
 
-void BaseRemoteRendezvous::DeregisterCall(BaseRecvTensorCall* call) {
+void BaseRemoteRendezvous::DeregisterCall(BaseRpcTensorCall* call) {
   mutex_lock l(mu_);
   active_.erase(call);
 }
