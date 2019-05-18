@@ -438,6 +438,7 @@ void RpcRemoteRendezvous::SendToRemoteAsync(const Rendezvous::ParsedKey& parsed,
                                             const Tensor& val,
                                             DoneCallback done) {
   VLOG(0) << "RpcRemoteRendez::SendToRemoteAsync " << parsed.FullKey();
+  // cause ValidateDevices problem occurs
   CHECK(is_initialized());
   Status s;
 

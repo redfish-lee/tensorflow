@@ -227,7 +227,8 @@ Status BaseRemoteRendezvous::Send(const Rendezvous::ParsedKey& parsed,
 }
 
 Status BaseRemoteRendezvous::ValidateDevices(const ParsedKey& parsed,
-                                             bool is_src) {
+                                             bool is_src, string caller) {
+  VLOG(0) << "ValidateDevices called by " << caller;
   // Cache session pointer to avoid repeatedly taking & releasing the lock
   // (e.g. calling session())
   WorkerSession* sess = nullptr;
@@ -318,7 +319,7 @@ void BaseRemoteRendezvous::RecvAsync(const ParsedKey& parsed,
                                      DoneCallback done) {
   VLOG(1) << "RemoteRendezvous Recv " << this << " " << parsed.FullKey();
   CHECK(is_initialized()) << "RecvAsync called when uninitialized.";
-  Status s = ValidateDevices(parsed, false /*!is_src*/);
+  Status s = ValidateDevices(parsed, false /*!is_src*/, __FUNCTION__);
   if (!s.ok()) {
     done(s, Args(), recv_args, Tensor(), false);
     return;
@@ -359,7 +360,7 @@ void BaseRemoteRendezvous::StSendAsync(const Rendezvous::ParsedKey& parsed,
                                        const Tensor& val,
                                        DoneCallback done) {
   VLOG(0) << "RemoteRendez StSendAsync " << this << " " << parsed.FullKey();
-  VLOG(0) << "Tensor: " << val.DebugString();
+  // VLOG(0) << "Tensor: " << val.DebugString();
   {
     mutex_lock l(mu_);
     if (!status_.ok()) {
@@ -374,7 +375,7 @@ void BaseRemoteRendezvous::StSendAsync(const Rendezvous::ParsedKey& parsed,
     }
   }
 
-  Status s = ValidateDevices(parsed, true /* is_src */);
+  Status s = ValidateDevices(parsed, true /* is_src */, __FUNCTION__);
   if (!s.ok()) {
     VLOG(0) << "StSendAsync devices invalid.";
     return;
@@ -429,7 +430,7 @@ void BaseRemoteRendezvous::RecvLocalAsync(const ParsedKey& parsed,
 
 void BaseRemoteRendezvous::RecvLocalAsyncInternal(const ParsedKey& parsed,
                                                   DoneCallback done) {
-  Status s = ValidateDevices(parsed, true /* is_src */);
+  Status s = ValidateDevices(parsed, true /* is_src */, __FUNCTION__);
   if (!s.ok()) {
     done(s, Args(), Args(), Tensor(), false);
     return;
@@ -443,12 +444,12 @@ void BaseRemoteRendezvous::SendToLocal(const ParsedKey& parsed,
                                        const Tensor& val, DoneCallback done) {
 
   VLOG(0) << "Server-side RemoteRendezvous::SendToLocal (foward to local)";
-  VLOG(0) << "Tensor val: " << val.DebugString();
+  // VLOG(0) << "Tensor val: " << val.DebugString();
 
   // No need to do initialize check due to Tensor is already available.
   // SendToLocalInternal. If "is_src" is false, checks that
   // the rendezvous key "parsed"'s destination is in this process.
-  Status s = ValidateDevices(parsed, false /* is_src */);
+  Status s = ValidateDevices(parsed, false /* is_src */, __FUNCTION__);
   if (!s.ok()) {
     done(s, Args(), Args(), Tensor(), false);
     return;

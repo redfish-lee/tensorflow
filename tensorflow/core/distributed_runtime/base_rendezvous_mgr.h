@@ -234,7 +234,8 @@ class BaseRemoteRendezvous : public RemoteRendezvous {
   // If "is_src" is true, checks that the rendezvous key "parsed"'s
   // source is in this process. If "is_src" is false, checks that the
   // rendezvous key "parsed"'s destination is in this process.
-  Status ValidateDevices(const Rendezvous::ParsedKey& parsed, bool is_src);
+  Status ValidateDevices(const Rendezvous::ParsedKey& parsed, 
+                         bool is_src, string caller);
 
   // Callback handling the case when a rendezvous has been
   // accomplished in local_ and the consumer is local to this process.
