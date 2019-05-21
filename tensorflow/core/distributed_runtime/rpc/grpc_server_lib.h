@@ -156,7 +156,7 @@ class GrpcServer : public ServerInterface {
   
   // Create monitor thread for cluster file changes
   std::unique_ptr<std::thread> monitor_thread_;
-  const string target_dir  = "/home/redfish/elastic-dev/userprog/config/";
+  const string target_dir  = std::getenv("HOME") + std::string("/elastic-dev/userprog/config/");
   const string target_file = "cluster.cfg";
 
   // Signal monitor while loop
