@@ -92,11 +92,11 @@ GrpcServer::GrpcServer(const ServerDef& server_def, Env* env)
 
   LOG(INFO) << "[GrpcServer/ctor] create thread and pass params";
 
-  monitor_thread_.reset(
-          new std::thread(monitor_func,
-              std::ref(target_dir), std::ref(target_file)));
+  // monitor_thread_.reset(
+  //         new std::thread(monitor_func,
+  //             std::ref(target_dir), std::ref(target_file)));
 
-  monitor_thread_->detach();
+  // monitor_thread_->detach();
 }
 
 GrpcServer::~GrpcServer() {
