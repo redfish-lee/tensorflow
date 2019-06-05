@@ -361,29 +361,18 @@ void BaseRemoteRendezvous::StSendAsync(const Rendezvous::ParsedKey& parsed,
                                        DoneCallback done) {
   VLOG(0) << "RemoteRendez StSendAsync " << this << " " << parsed.FullKey();
   // VLOG(0) << "Tensor: " << val.DebugString();
-  {
-    mutex_lock l(mu_);
-    if (!status_.ok()) {
-      VLOG(0) << "status: " << status_;
-      return;
-    }
-    DCHECK(is_initialized_locked());
-    if (!IsLocalDevice(session_->worker_name, parsed.src_device)) {
-      VLOG(0) << "Invalid rendezvous key (src): " << parsed.FullKey()
-              << " @ " << session_->worker_name;
-      return;
-    }
-  }
 
+  CHECK(is_initialized()) << "StSendAsync called when uninitialized.";
   Status s = ValidateDevices(parsed, true /* is_src */, __FUNCTION__);
   if (!s.ok()) {
     VLOG(0) << "StSendAsync devices invalid.";
+    done(s, Args(), args, Tensor(), false);
     return;
   }
 
   // src and dst should not in the same worker due to partition policy.
   if (IsSameWorker(parsed.src, parsed.dst)) {
-    VLOG(0) << "[SUPPOSED_NOT_REACHED] StSendAsync call local_ (src/dst IsSameWorker)";
+    VLOG(0) << "[NOT_REACHED] StSendAsync call local_ (src/dst IsSameWorker)";
     // is_dead set to true (temporary)
     local_->Send(parsed, args, val, true);
     return;
@@ -398,10 +387,21 @@ void BaseRemoteRendezvous::StRecvAsync(const Rendezvous::ParsedKey& parsed,
                                        const Rendezvous::Args& args,
                                        DoneCallback done) {
   VLOG(0) << "RemoteRendez StRecvAsync " << this << " " << parsed.FullKey();
+  {
+    mutex_lock l(mu_);
+    if (!is_initialized_locked()) {
+      DeferredCall call(parsed, std::move(done));
+      deferred_calls_.push_back(call);
+      return;
+    }
+  }
 
-  // here we want to spinlock(polling)
-  // to get Tensor and write to local_ rendezvous
-  // So, here we might call local.
+  // Destination which get tensor from request.
+  Status s = ValidateDevices(parsed, false /* is_src */, __FUNCTION__);
+  if (!s.ok()) {
+    done(s, Args(), Args(), Tensor(), false);
+    return;
+  }
 
   // Maybe call localRecv first.
   VLOG(0) << "Foward to LocalRecv" << this << " " << parsed.FullKey();
@@ -445,6 +445,16 @@ void BaseRemoteRendezvous::SendToLocal(const ParsedKey& parsed,
 
   VLOG(0) << "Server-side RemoteRendezvous::SendToLocal (foward to local)";
   // VLOG(0) << "Tensor val: " << val.DebugString();
+
+  {
+    mutex_lock l(mu_);
+    if (!status_.ok()) return;
+    DCHECK(is_initialized_locked());
+    if (!IsLocalDevice(session_->worker_name, parsed.dst_device)) {
+      VLOG(1) << "Invalid rendezvous key (src): " << parsed.FullKey()
+              << " @ " << session_->worker_name;
+    }
+  }
 
   // No need to do initialize check due to Tensor is already available.
   // SendToLocalInternal. If "is_src" is false, checks that
