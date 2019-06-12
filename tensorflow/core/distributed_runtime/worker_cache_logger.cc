@@ -135,7 +135,10 @@ void WorkerCacheLogger::RecordDataTransfer(int64 step_id, int64 start_usecs,
   no->mutable_tensor_description()
       ->mutable_allocation_description()
       ->set_requested_bytes(bytes);
-  Save(dst_device, step_id, ns);
+
+  // SendTensor's caller is worker(src)
+  if (!transfer_method_name.compare("SendTensor")) Save(src_device, step_id, ns);
+  if (!transfer_method_name.compare("RecvTensor")) Save(dst_device, step_id, ns);
 }
 
 }  // namespace tensorflow

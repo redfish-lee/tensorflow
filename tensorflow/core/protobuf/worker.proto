@@ -386,7 +386,7 @@ message SendTensorResponse {
   // If true, status was is invalid.
   bool is_dead = 1;
 
-  // The time at which tensor was available and started to be returned.
+  // The time which rpc call started to be returned.
   int64 send_start_micros = 2;
 
   google.protobuf.Any transport_options = 3;

@@ -197,12 +197,32 @@ class GrpcRemoteWorker : public WorkerInterface {
             VLOG(0) << "[error] SendTensorRequest tensor total bytes: " 
                     << t.TotalBytes();
           }
+
+          // This time measurement is same as RecvTensor
           int64 send_start_usec = start_usec;
+          if (response->metadata().send_start_micros()) {
+            // send_start_micros is the timestamp taken when the
+            // remote machine began to send the SendTensor response.
+            // Due to clock skew between source and dest machines, it
+            // is possible that send_start_micros can be larger than
+            // end_usec or less than start_usec.
+            //
+            // To respect causality, we enforce the invariants that
+            // the RecvTensor response can not have been sent before
+            // the RecvTensor request, and must have been sent before
+            // it was received.
+            send_start_usec = std::max(
+                start_usec,
+                static_cast<int64>(response->metadata().send_start_micros()));
+            send_start_usec = std::min(send_start_usec, end_usec - 1);
+          }
+
           const string& key = request->rendezvous_key();
           std::vector<string> key_parts = str_util::Split(key, ';');
           if (key_parts.size() != 5) {
             LOG(WARNING) << "Bad key: " << key;
           } else {
+            VLOG(0) << "RecordSendTensor with step: " << step_id; 
             logger_->RecordSendTensor(step_id, send_start_usec, end_usec,
                                       key_parts[3],  // tensor name
                                       key_parts[0],  // src_device
