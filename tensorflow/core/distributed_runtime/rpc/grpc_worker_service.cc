@@ -531,8 +531,19 @@ void GrpcWorker::GrpcSendTensorAsync(CallOptions* opts,
                                       const Rendezvous::Args& recv_args,
                                       const Tensor& val, const bool is_dead) {
         opts->ClearCancelCallback();
-        done(status);
-        VLOG(0) << "Callback of RendezMgr SendToLocalRendez";
+        if (status.ok()) {
+          // (TODO)
+          // If using GPU, might copy data to CPU/GPU, we might implement here.
+
+          // Use for time logging, used to set in EncodeTensorToByteBuffer.
+          response->set_send_start_micros(Env::Default()->NowMicros());
+          done(Status::OK());
+        } else {
+          //  !s.ok()
+          done(status);
+        }
+
+        VLOG(0) << "Server:GrpcSendTensorAsync, RendezMgr::SendToLocalRendez callback";
       });
 }
 
