@@ -374,6 +374,7 @@ class RpcSendTensorCall : public BaseRpcTensorCall {
   AllocatorAttributes alloc_attrs_;
   Device* src_device_;    /* where StSend lives on */
   CallOptions opts_;
+  // This can transfer into TensorInRequest
   SendTensorRequest req_; /* proto */
   TensorResponse resp_;
   Rendezvous::Args send_args_;
