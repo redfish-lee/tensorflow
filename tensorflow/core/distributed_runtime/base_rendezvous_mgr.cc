@@ -449,6 +449,7 @@ void BaseRemoteRendezvous::SendToLocal(const ParsedKey& parsed,
   {
     mutex_lock l(mu_);
     if (!status_.ok()) return;
+    // this will cause elastic crash
     DCHECK(is_initialized_locked());
     if (!IsLocalDevice(session_->worker_name, parsed.dst_device)) {
       VLOG(1) << "Invalid rendezvous key (src): " << parsed.FullKey()
